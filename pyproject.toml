@@ -16,6 +16,9 @@ maintainers = [
 ]
 readme = "README.md"
 license-files = ["LICENSE", "NOTICE", "LICENSES/LGPL-2.1.txt"]
+classifiers = [
+  "Operating System :: POSIX :: Linux",
+]
 
 [project.optional-dependencies]
 dev = ["pytest"]

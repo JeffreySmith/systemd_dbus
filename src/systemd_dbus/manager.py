@@ -83,13 +83,6 @@ class SystemdManager:
 
         # Get properties from Systemd
         lib.get_property.argtypes = [
-            ctypes.c_char_p, # result
-            ctypes.c_size_t, # result buffer length
-            ctypes.c_char_p, # error buffer
-            ctypes.c_size_t, # error buffer length
-        ]
-
-        lib.get_property.argtypes = [
             ctypes.c_char_p,  # destination
             ctypes.c_char_p,  # path
             ctypes.c_char_p,  # interface
@@ -217,6 +210,7 @@ class SystemdManager:
 
 
     def daemon_reload(self) -> None:
+        """Reload the systemd daemon to pick up any changes to unit files. This is required after installing or modifying unit files, but does not require a full restart of the systemd service. Note that this will reload all unit files on the system, so it may take some time to complete if there are a large number of units. If D-Bus is unavailable or if permission is denied, this will attempt to call `systemctl daemon-reload` directly as a fallback."""
         if self._dbus_available:
             errbuf = ctypes.create_string_buffer(ERRBUF_SIZE)
             r = self._lib.daemon_reload(errbuf, ctypes.sizeof(errbuf))
@@ -300,6 +294,7 @@ class SystemdManager:
         return result_buf.value.decode().strip()
 
     def version(self) -> int | None:
+        """Get the systemd version running on the system. For now, only works through DBus"""
         if self._dbus_available is None:
             return None
         val = self._get_property(
@@ -313,6 +308,7 @@ class SystemdManager:
         return int(m.group(0)) if m else None
 
     def timezone(self) -> str | None:
+        """Get the system timezone. For now, only works through DBus"""
         if self._dbus_available is None:
             return None
         return self._get_property(
@@ -324,6 +320,7 @@ class SystemdManager:
         )
 
     def pid(self, unit_name: str) -> int | None:
+        """Get the main PID of a systemd unit. The unit name may be specified with or without the .service suffix. If the service isn't running, returns None"""
         if self._dbus_available is None:
             pid = self._fallback_with_stdout("show", unit_name, additional_args=["--property=MainPID", "--no-pager"], timeout=10).decode()
             if not pid or "=" not in pid:
