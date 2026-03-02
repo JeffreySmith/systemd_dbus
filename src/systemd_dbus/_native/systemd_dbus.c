@@ -413,3 +413,33 @@ cleanup:
   sd_bus_unref(bus);
   return r < 0 ? r : 0;
 }
+
+int daemon_reload(char *errbuf, size_t errbuf_len) {
+  sd_bus *bus = NULL;
+  sd_bus_error err = SD_BUS_ERROR_NULL;
+  sd_bus_message *reply = NULL;
+
+  int r = sd_bus_open_system(&bus);
+  if (r < 0) {
+    snprintf(errbuf, errbuf_len, "Failed to connect to system bus: %s",
+             strerror(-r));
+    goto cleanup;
+  }
+
+  r = sd_bus_call_method(
+      bus, "org.freedesktop.systemd1", "/org/freedesktop/systemd1",
+      "org.freedesktop.systemd1.Manager", "Reload", &err, &reply, "");
+
+  if (r < 0) {
+    if (err.message) {
+      snprintf(errbuf, errbuf_len, "%s", err.message);
+    } else {
+      snprintf(errbuf, errbuf_len, "Daemon reload failed: %s", strerror(-r));
+    }
+  }
+cleanup:
+  sd_bus_error_free(&err);
+  sd_bus_message_unref(reply);
+  sd_bus_unref(bus);
+  return r < 0 ? r : 0;
+}

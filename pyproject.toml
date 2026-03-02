@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "systemd-dbus"
-version = "0.1"
+version = "0.2"
 description = "Thin Python bindings for a minimal set of systemd service management commands, using sd-bus"
 requires-python = ">=3.9"
 license = "Apache-2.0"

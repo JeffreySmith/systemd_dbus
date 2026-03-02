@@ -20,7 +20,6 @@ import ctypes
 import importlib.util
 import re
 import subprocess
-import time
 import warnings
 
 from typing import Final
@@ -116,6 +115,13 @@ class SystemdManager:
         ]
         lib.get_unit_property.restype = ctypes.c_int
 
+        # Restart the sysetmd daemon
+        lib.daemon_reload.argtypes = [
+            ctypes.c_char_p,
+            ctypes.c_size_t,
+        ]
+        lib.daemon_reload.restype = ctypes.c_int
+
         return lib
 
     def _check_dbus(self) -> bool:
@@ -144,12 +150,15 @@ class SystemdManager:
                     return
                 raise SystemdError(f"{fn_name} failed for {unit_name!r}: {msg}")
 
-    def _fallback_call(self, fn_name: str, unit_name: str, timeout=30) -> None:
+    def _fallback_call(self, fn_name: str, unit_name: str, timeout: int =30, additional_args:list|None=None, password:str|None=None) -> None:
         replaced_fn_name = fn_name.replace("_unit", "")
+        command = ["systemctl", replaced_fn_name, unit_name]
+        if additional_args:
+            command.extend(additional_args)
         if AMBARI_AVAILABLE:
             from resource_management.core import shell
             code, stdout, stderr = shell.checked_call(
-                ("systemctl", replaced_fn_name, unit_name),
+                tuple(command),
                 sudo=True,
                 stderr=subprocess.PIPE,
                 quiet=True,
@@ -159,7 +168,83 @@ class SystemdManager:
         else:
             from subprocess import Popen, PIPE
             try:
-                process = Popen(["systemctl", replaced_fn_name, unit_name], stdout=PIPE, stderr=PIPE)
+                process = Popen(command, stdout=PIPE, stderr=PIPE)
+            except OSError as e:
+                raise SystemdError(f"Failed to execute systemctl command: {e}")
+            try:
+                _, stderr = process.communicate(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                # Try to kill the process if it's still running, and then see if we can grab any output from it
+                process.kill()
+                _, stderr = process.communicate()
+                raise SystemdError(f"systemctl {replaced_fn_name!r} timed out after {timeout} seconds for {unit_name!r}")
+            if process.returncode != 0:
+                raise SystemdError(f"systemctl {replaced_fn_name!r} failed for {unit_name!r}: {stderr.decode().strip()}")
+
+    def _fallback_with_stdout(self, fn_name: str, unit_name: str, timeout: int =30, additional_args:list|None=None) -> bytes :
+        replaced_fn_name = fn_name.replace("_unit", "")
+        command = ["systemctl", replaced_fn_name, unit_name]
+        if additional_args:
+            command.extend(additional_args)
+        if AMBARI_AVAILABLE:
+            from resource_management.core import shell
+            code, stdout, stderr = shell.checked_call(
+                tuple(command),
+                sudo=True,
+                stderr=subprocess.PIPE,
+                quiet=True,
+            )
+            if code != 0:
+                raise SystemdError(f"systemctl {replaced_fn_name!r} failed for {unit_name!r} through Ambari: {stderr.strip()}")
+            return stdout.strip()
+        else:
+            from subprocess import Popen, PIPE
+            try:
+                process = Popen(command, stdout=PIPE, stderr=PIPE)
+            except OSError as e:
+                raise SystemdError(f"Failed to execute systemctl command: {e}")
+            try:
+                stdout, stderr = process.communicate(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                # Try to kill the process if it's still running, and then see if we can grab any output from it
+                process.kill()
+                _, stderr = process.communicate()
+                raise SystemdError(f"systemctl {replaced_fn_name!r} timed out after {timeout} seconds for {unit_name!r}")
+            if process.returncode != 0:
+                raise SystemdError(f"systemctl {replaced_fn_name!r} failed for {unit_name!r}: {stderr.decode().strip()}")
+
+            return stdout.strip()
+
+
+    def daemon_reload(self) -> None:
+        if self._dbus_available:
+            errbuf = ctypes.create_string_buffer(ERRBUF_SIZE)
+            r = self._lib.daemon_reload(errbuf, ctypes.sizeof(errbuf))
+            if r < 0:
+                msg = errbuf.value.decode(errors="replace") or f"errno {-r}"
+                if "AccessDenied" or "Interactive authentication" in msg:
+                    warnings.warn("D-Bus permission denied for daemon_reload, attempting fallback")
+                    self._fallback_reload()
+                    return
+                raise SystemdError(f"Systemd daemon reload failed: {msg}")
+        else:
+            self._fallback_reload()
+
+    def _fallback_reload(self, timeout=30) -> None:
+        if AMBARI_AVAILABLE:
+            from resource_management.core import shell
+            code, stdout, stderr = shell.checked_call(
+                ("systemctl", "daemon-reload"),
+                sudo=True,
+                stderr=subprocess.PIPE,
+                quiet=True,
+            )
+            if code != 0:
+                raise SystemdError(f"systemctl daemon-reload failed through Ambari: {stderr.strip()}")
+        else:
+            from subprocess import Popen, PIPE
+            try:
+                process = Popen(["systemctl", "daemon-reload"], stdout=PIPE, stderr=PIPE)
             except OSError as e:
                 raise SystemdError(f"Failed to execute systemctl command: {e}")
             try:
@@ -167,9 +252,10 @@ class SystemdManager:
             except subprocess.TimeoutExpired:
                 process.kill()
                 _, stderr = process.communicate()
-                raise SystemdError(f"systemctl {replaced_fn_name!r} timed out after {timeout} seconds for {unit_name!r}")
+                raise SystemdError(f"systemctl daemon-reload timed out after {timeout} seconds")
             if process.returncode != 0:
-                raise SystemdError(f"systemctl {replaced_fn_name!r} failed for {unit_name!r}: {stderr.decode().strip()}")
+                raise SystemdError(f"systemctl daemon-reload failed: {stderr.decode().strip()}")
+
 
     def start(self, unit_name: str) -> None:
         """Start a systemd unit by name. The unit name may be specified with or without the .service suffix."""
@@ -214,6 +300,8 @@ class SystemdManager:
         return result_buf.value.decode().strip()
 
     def version(self) -> int | None:
+        if self._dbus_available is None:
+            return None
         val = self._get_property(
             "org.freedesktop.systemd1",
             "/org/freedesktop/systemd1",
@@ -225,6 +313,8 @@ class SystemdManager:
         return int(m.group(0)) if m else None
 
     def timezone(self) -> str | None:
+        if self._dbus_available is None:
+            return None
         return self._get_property(
             "org.freedesktop.timedate1",
             "/org/freedesktop/timedate1",
@@ -234,6 +324,19 @@ class SystemdManager:
         )
 
     def pid(self, unit_name: str) -> int | None:
+        if self._dbus_available is None:
+            pid = self._fallback_with_stdout("show", unit_name, additional_args=["--property=MainPID", "--no-pager"], timeout=10).decode()
+            if not pid or "=" not in pid:
+                return None
+            output = pid.split("=")
+            if len(output) > 1:
+                try:
+                    pid_val = int(output[1])
+                    return pid_val if pid_val != 0 else None
+                except ValueError:
+                    raise SystemdError(f"Failed to parse PID from systemctl output: {pid!r}")
+            return
+
         unit_name = unit_name if unit_name.endswith(".service") else f"{unit_name}.service"
         result = ctypes.create_string_buffer(32)
         errbuf = ctypes.create_string_buffer(ERRBUF_SIZE)

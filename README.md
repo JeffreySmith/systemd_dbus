@@ -31,4 +31,4 @@ Expected features to be added:
 
 1. ~~Enabling/Disabling services~~
 2. Get the status of a service
-3. Reload the Systemd Daemon
+3. ~~Reload the Systemd Daemon~~
