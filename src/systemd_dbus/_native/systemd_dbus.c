@@ -344,7 +344,7 @@ cleanup:
   return r < 0 ? r : 0;
 }
 
-int enable_unit(const char *unit_name, char *errbuf, size_t errbuf_len) {
+int disable_unit(const char *unit_name, char *errbuf, size_t errbuf_len) {
   sd_bus *bus = NULL;
   sd_bus_error err = SD_BUS_ERROR_NULL;
   sd_bus_message *msg = NULL;
