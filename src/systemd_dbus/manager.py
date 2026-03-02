@@ -69,13 +69,20 @@ class SystemdManager:
         # All of these have the same type signature
         for fn_name in ("start_unit", "stop_unit", "restart_unit", "enable_unit", "disable_unit"):
             fn = getattr(lib, fn_name)
-            fn.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_size_t]
-            fn.restype = ctypes.c_int
+            fn.argtypes = [
+                ctypes.c_char_p, # unit name
+                ctypes.c_char_p, # error buffer
+                ctypes.c_size_t] # error buffer length
+            fn.restype = ctypes.c_int # return type is a status int. Non-zero means failure
 
-        lib.check_dbus_available.argtypes = [ctypes.c_char_p, ctypes.c_size_t]
+        # Check to see that dbus is running
+        lib.check_dbus_available.argtypes = [
+            ctypes.c_char_p, # error buffer
+            ctypes.c_size_t, # error buffer length
+        ]
         lib.check_dbus_available.restype = ctypes.c_int
 
-        # Get properties from Systemd generally
+        # Get properties from Systemd
         lib.get_property.argtypes = [
             ctypes.c_char_p, # result
             ctypes.c_size_t, # result buffer length
