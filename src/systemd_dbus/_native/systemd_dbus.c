@@ -20,14 +20,20 @@ under the License.
 #include <inttypes.h>
 #include <stddef.h>
 #include <stdio.h>
+#include <string.h>
 #include <systemd/sd-bus.h>
 
+// Generic method caller to reduce boilerplate for start/stop/restart unit
+// methods
 static int call_method(const char *method, const char *types, const char *arg1,
                        const char *arg2, char *errbuf, size_t errbuf_len) {
   sd_bus *bus = NULL;
   sd_bus_error err = SD_BUS_ERROR_NULL;
   sd_bus_message *reply = NULL;
   int r;
+
+  // Clear error buffer
+  memset(errbuf, 0, errbuf_len);
 
   r = sd_bus_open_system(&bus);
   if (r < 0) {
@@ -60,6 +66,7 @@ int check_dbus_available(char *errbuf, size_t errbuf_len) {
   sd_bus_error err = SD_BUS_ERROR_NULL;
   sd_bus_message *reply = NULL;
   int r;
+  memset(errbuf, 0, errbuf_len);
 
   r = sd_bus_open_system(&bus);
   if (r < 0) {
@@ -102,6 +109,7 @@ static int read_message_value(sd_bus_message *reply, const char *type,
                               char *result, size_t result_len, char *errbuf,
                               size_t errbuf_len) {
   int r;
+  memset(errbuf, 0, errbuf_len);
 
   switch (type[0]) {
   case 's': {
@@ -126,6 +134,7 @@ static int read_message_value(sd_bus_message *reply, const char *type,
     if (r >= 0) {
       snprintf(result, result_len, "%d", val);
     }
+    break;
   }
   case 't': {
     uint64_t val = 0;
@@ -169,6 +178,8 @@ int get_unit_property(const char *unit_name, const char *interface,
   sd_bus_error err = SD_BUS_ERROR_NULL;
   sd_bus_message *reply = NULL;
   int r;
+  memset(errbuf, 0, errbuf_len);
+  memset(result, 0, result_len);
 
   r = sd_bus_open_system(&bus);
   if (r < 0) {
@@ -178,6 +189,7 @@ int get_unit_property(const char *unit_name, const char *interface,
   }
 
   char unit_path[256] = {0};
+  // If the path is longer than 255 bytes, it will truncate
 
   r = sd_bus_call_method(bus, "org.freedesktop.systemd1",
                          "/org/freedesktop/systemd1",
@@ -245,6 +257,9 @@ int get_property(
   sd_bus_message *reply = NULL;
   int r;
 
+  memset(errbuf, 0, errbuf_len);
+  memset(result, 0, result_len);
+
   r = sd_bus_open_system(&bus);
   if (r < 0) {
     if (errbuf) {
@@ -280,6 +295,8 @@ int enable_unit(const char *unit_name, char *errbuf, size_t errbuf_len) {
   sd_bus_error err = SD_BUS_ERROR_NULL;
   sd_bus_message *msg = NULL;
   sd_bus_message *reply = NULL;
+
+  memset(errbuf, 0, errbuf_len);
 
   int r;
   r = sd_bus_open_system(&bus);
@@ -350,6 +367,8 @@ int disable_unit(const char *unit_name, char *errbuf, size_t errbuf_len) {
   sd_bus_message *msg = NULL;
   sd_bus_message *reply = NULL;
 
+  memset(errbuf, 0, errbuf_len);
+
   int r;
   r = sd_bus_open_system(&bus);
   if (r < 0) {
@@ -418,6 +437,8 @@ int daemon_reload(char *errbuf, size_t errbuf_len) {
   sd_bus *bus = NULL;
   sd_bus_error err = SD_BUS_ERROR_NULL;
   sd_bus_message *reply = NULL;
+
+  memset(errbuf, 0, errbuf_len);
 
   int r = sd_bus_open_system(&bus);
   if (r < 0) {
