@@ -1,0 +1,4 @@
+This software uses libsystemd, which is part of the systemd project.
+libsystemd is licensed under the GNU Lesser General Public License v2.1 or later.
+Source: https://github.com/systemd/systemd
+License: LGPL-2.1-or-later
