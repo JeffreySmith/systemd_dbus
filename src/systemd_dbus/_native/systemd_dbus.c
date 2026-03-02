@@ -274,3 +274,142 @@ cleanup:
   sd_bus_unref(bus);
   return r < 0 ? r : 0;
 }
+
+int enable_unit(const char *unit_name, char *errbuf, size_t errbuf_len) {
+  sd_bus *bus = NULL;
+  sd_bus_error err = SD_BUS_ERROR_NULL;
+  sd_bus_message *msg = NULL;
+  sd_bus_message *reply = NULL;
+
+  int r;
+  r = sd_bus_open_system(&bus);
+  if (r < 0) {
+    snprintf(errbuf, errbuf_len, "Failed to connect to system bus: %s",
+             strerror(-r));
+    goto cleanup;
+  }
+
+  r = sd_bus_message_new_method_call(
+      bus, &msg, "org.freedesktop.systemd1", "/org/freedesktop/systemd1",
+      "org.freedesktop.systemd1.Manager", "EnableUnitFiles");
+
+  if (r < 0) {
+    snprintf(errbuf, errbuf_len, "Failed to create message: %s", strerror(-r));
+    goto cleanup;
+  }
+  // Start an array
+  r = sd_bus_message_open_container(msg, 'a', "s");
+  if (r < 0) {
+    snprintf(errbuf, errbuf_len, "Failed to open array container: %s",
+             strerror(-r));
+    goto cleanup;
+  }
+  r = sd_bus_message_append_basic(msg, 's', unit_name);
+  if (r < 0) {
+    snprintf(errbuf, errbuf_len, "Failed to append unit name: %s",
+             strerror(-r));
+    goto cleanup;
+  }
+  r = sd_bus_message_close_container(msg);
+  if (r < 0) {
+    snprintf(errbuf, errbuf_len, "Failed to close array container: %s",
+             strerror(-r));
+    goto cleanup;
+  }
+
+  // runtime=false, force=true for the magic numbers
+  r = sd_bus_message_append(msg, "bb", 0, 1);
+
+  if (r < 0) {
+    snprintf(errbuf, errbuf_len, "Failed to append arguments: %s",
+             strerror(-r));
+    goto cleanup;
+  }
+
+  r = sd_bus_call(bus, msg, 0, &err, &reply);
+  if (r < 0) {
+    if (err.message) {
+      snprintf(errbuf, errbuf_len, "%s", err.message);
+    } else {
+      snprintf(errbuf, errbuf_len, "Enable unit file failed: %s", strerror(-r));
+    }
+    goto cleanup;
+  }
+
+cleanup:
+  sd_bus_error_free(&err);
+  sd_bus_message_unref(msg);
+  sd_bus_message_unref(reply);
+  sd_bus_unref(bus);
+  return r < 0 ? r : 0;
+}
+
+int enable_unit(const char *unit_name, char *errbuf, size_t errbuf_len) {
+  sd_bus *bus = NULL;
+  sd_bus_error err = SD_BUS_ERROR_NULL;
+  sd_bus_message *msg = NULL;
+  sd_bus_message *reply = NULL;
+
+  int r;
+  r = sd_bus_open_system(&bus);
+  if (r < 0) {
+    snprintf(errbuf, errbuf_len, "Failed to connect to system bus: %s",
+             strerror(-r));
+    goto cleanup;
+  }
+
+  r = sd_bus_message_new_method_call(
+      bus, &msg, "org.freedesktop.systemd1", "/org/freedesktop/systemd1",
+      "org.freedesktop.systemd1.Manager", "DisableUnitFiles");
+
+  if (r < 0) {
+    snprintf(errbuf, errbuf_len, "Failed to create message: %s", strerror(-r));
+    goto cleanup;
+  }
+  // Start an array
+  r = sd_bus_message_open_container(msg, 'a', "s");
+  if (r < 0) {
+    snprintf(errbuf, errbuf_len, "Failed to open array container: %s",
+             strerror(-r));
+    goto cleanup;
+  }
+  r = sd_bus_message_append_basic(msg, 's', unit_name);
+  if (r < 0) {
+    snprintf(errbuf, errbuf_len, "Failed to append unit name: %s",
+             strerror(-r));
+    goto cleanup;
+  }
+  r = sd_bus_message_close_container(msg);
+  if (r < 0) {
+    snprintf(errbuf, errbuf_len, "Failed to close array container: %s",
+             strerror(-r));
+    goto cleanup;
+  }
+
+  // runtime=false, force=true for the magic numbers
+  r = sd_bus_message_append(msg, "bb", 0, 1);
+
+  if (r < 0) {
+    snprintf(errbuf, errbuf_len, "Failed to append arguments: %s",
+             strerror(-r));
+    goto cleanup;
+  }
+
+  r = sd_bus_call(bus, msg, 0, &err, &reply);
+  if (r < 0) {
+    if (err.message) {
+      snprintf(errbuf, errbuf_len, "%s", err.message);
+    } else {
+      snprintf(errbuf, errbuf_len, "Disable unit file failed: %s",
+               strerror(-r));
+    }
+    goto cleanup;
+  }
+
+cleanup:
+  sd_bus_error_free(&err);
+  sd_bus_message_unref(msg);
+  sd_bus_message_unref(reply);
+  sd_bus_unref(bus);
+  return r < 0 ? r : 0;
+}

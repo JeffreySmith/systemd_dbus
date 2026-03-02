@@ -20,6 +20,7 @@ import ctypes
 import importlib.util
 import re
 import subprocess
+import time
 import warnings
 
 from typing import Final
@@ -66,7 +67,7 @@ class SystemdManager:
         lib = ctypes.CDLL(spec.origin)
 
         # All of these have the same type signature
-        for fn_name in ("start_unit", "stop_unit", "restart_unit"):
+        for fn_name in ("start_unit", "stop_unit", "restart_unit", "enable_unit", "disable_unit"):
             fn = getattr(lib, fn_name)
             fn.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_size_t]
             fn.restype = ctypes.c_int
@@ -136,10 +137,9 @@ class SystemdManager:
                     return
                 raise SystemdError(f"{fn_name} failed for {unit_name!r}: {msg}")
 
-    def _fallback_call(self, fn_name: str, unit_name: str) -> None:
+    def _fallback_call(self, fn_name: str, unit_name: str, timeout=30) -> None:
         replaced_fn_name = fn_name.replace("_unit", "")
         if AMBARI_AVAILABLE:
-            print("Trying from Ambari...")
             from resource_management.core import shell
             code, stdout, stderr = shell.checked_call(
                 ("systemctl", replaced_fn_name, unit_name),
@@ -148,26 +148,41 @@ class SystemdManager:
                 quiet=True,
             )
             if code != 0:
-                raise SystemdError(f"{replaced_fn_name} failed for {unit_name!r}: {stderr.strip()}")
+                raise SystemdError(f"systemctl {replaced_fn_name!r} failed for {unit_name!r} through Ambari: {stderr.strip()}")
         else:
-            print("Trying with subprocess...")
             from subprocess import Popen, PIPE
             try:
                 process = Popen(["systemctl", replaced_fn_name, unit_name], stdout=PIPE, stderr=PIPE)
             except OSError as e:
                 raise SystemdError(f"Failed to execute systemctl command: {e}")
-            _, stderr = process.communicate()
+            try:
+                _, stderr = process.communicate(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                _, stderr = process.communicate()
+                raise SystemdError(f"systemctl {replaced_fn_name!r} timed out after {timeout} seconds for {unit_name!r}")
             if process.returncode != 0:
                 raise SystemdError(f"systemctl {replaced_fn_name!r} failed for {unit_name!r}: {stderr.decode().strip()}")
 
     def start(self, unit_name: str) -> None:
+        """Start a systemd unit by name. The unit name may be specified with or without the .service suffix."""
         self._call("start_unit", unit_name)
 
     def stop(self, unit_name: str) -> None:
+        """Stop a systemd unit by name. The unit name may be specified with or without the .service suffix."""
         self._call("stop_unit", unit_name)
 
     def restart(self, unit_name: str) -> None:
+        """Restart a systemd unit by name. The unit name may be specified with or without the .service suffix."""
         self._call("restart_unit", unit_name)
+
+    def enable(self, unit_name: str) -> None:
+        """Enable a systemd unit by name. The unit name may be specified with or without the .service suffix."""
+        self._call("enable_unit", unit_name)
+
+    def disable(self, unit_name: str) -> None:
+        """Disable a systemd unit by name. The unit name may be specified with or without the .service suffix."""
+        self._call("disable_unit", unit_name)
 
     def _get_property(self, destination: str, path: str, interface: str, property: str, dbus_type: bytes) -> str:
         result_buf = ctypes.create_string_buffer(ERRBUF_SIZE)
