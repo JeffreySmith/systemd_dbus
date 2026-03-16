@@ -900,8 +900,8 @@ static PyObject *_init_module(void) {
     return NULL;
   }
 
-  SystemdDBusError =
-      PyErr_NewException("_sdbus.SystemdDBusError", PyExc_OSError, NULL);
+  SystemdDBusError = PyErr_NewException("systemd_dbus._sdbus.SystemdDBusError",
+                                        PyExc_OSError, NULL);
 
   if (!SystemdDBusError) {
     return NULL;

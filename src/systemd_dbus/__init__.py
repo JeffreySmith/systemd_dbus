@@ -15,6 +15,6 @@ KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.    
 """
-from .manager import SystemdManager, SystemdError
+from .manager import SystemdManager
 
-__all__ = ["SystemdManager", "SystemdError"]
+__all__ = ["SystemdManager"]

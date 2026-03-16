@@ -6,23 +6,16 @@ build-backend = "setuptools.build_meta"
 name = "systemd-dbus"
 version = "0.2"
 description = "Thin Python bindings for a minimal set of systemd service management commands, using sd-bus"
-requires-python = ">=3.9"
+requires-python = ">=2.7"
 license = "Apache-2.0"
-authors = [
-  {name = "Jeffrey Smith", email = "jeffrey.smith@acceldata.io"},
-]
-maintainers = [
-{name = "Jeffrey Smith", email = "jeffrey.smith@acceldata.io"},
-]
+authors = [{ name = "Jeffrey Smith", email = "jeffrey.smith@acceldata.io" }]
+maintainers = [{ name = "Jeffrey Smith", email = "jeffrey.smith@acceldata.io" }]
 readme = "README.md"
 license-files = ["LICENSE", "NOTICE", "LICENSES/LGPL-2.1.txt"]
-classifiers = [
-  "Operating System :: POSIX :: Linux",
-]
+classifiers = ["Operating System :: POSIX :: Linux"]
 
 [project.optional-dependencies]
 dev = ["pytest"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
-
