@@ -23,7 +23,6 @@ under the License.
 #include <stdio.h>
 #include <string.h>
 #include <systemd/sd-bus.h>
-
 // Some of the C api changed between Python 2 and 3
 #if PY_MAJOR_VERSION < 3
 #define PyLong_FromLong PyInt_FromLong
@@ -408,7 +407,7 @@ static int get_unit_property_raw(const char *unit_name, const char *property,
                          &reply, "s", unit_name);
 
   if (r < 0) {
-    snprintf(errbuf, errbuf_len, "%s",
+    snprintf(errbuf, errbuf_len, "GetUnit failed: %s",
              err.message ? err.message : strerror(-r));
     goto cleanup;
   }
@@ -433,12 +432,12 @@ static int get_unit_property_raw(const char *unit_name, const char *property,
   reply = NULL;
   sd_bus_error_free(&err);
   err = SD_BUS_ERROR_NULL;
-
   r = sd_bus_get_property(bus, "org.freedesktop.systemd1", unit_path, interface,
                           property, &err, &reply, type);
 
   if (r < 0) {
-    snprintf(errbuf, errbuf_len, "%s",
+    snprintf(errbuf, errbuf_len, "get_property(%s, %s) failed [%s]: %s",
+             interface, property, err.name ? err.name : "no error name",
              err.message ? err.message : strerror(-r));
     goto cleanup;
   }
@@ -480,10 +479,11 @@ static PyObject *py_get_unit_property(PyObject *self, PyObject *args) {
 Py_BEGIN_ALLOW_THREADS
   r = get_unit_property_raw(
     unit_name,
-    info->interface,
     property,
+    info->interface,
     info->type,
-    &val, errbuf,
+    &val,
+    errbuf,
     sizeof(errbuf)
   );
 Py_END_ALLOW_THREADS
