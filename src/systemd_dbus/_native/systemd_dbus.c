@@ -22,9 +22,7 @@ under the License.
 #include <stddef.h>
 #include <stdio.h>
 #include <string.h>
-/* TODO: Replace with the actual systemd header before pushing */
-// #include <systemd/sd-bus.h>
-#include "sd-bus.h"
+#include <systemd/sd-bus.h>
 
 // Some of the C api changed between Python 2 and 3
 #if PY_MAJOR_VERSION < 3
