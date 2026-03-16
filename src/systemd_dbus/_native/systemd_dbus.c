@@ -126,10 +126,10 @@ static int read_unit_changes(sd_bus_message *reply, UnitChange **changes_out,
     changes = tmp;
 
     // Make it safe to free the last element, if anything goes wrong
-    changes[num_changes - 1] = (UnitChange){NULL, NULL, NULL};
-    changes[num_changes - 1].type = strdup(ctype);
-    changes[num_changes - 1].symlink_path = strdup(symlink_path);
-    changes[num_changes - 1].dest = strdup(dest);
+    changes[num_changes] = (UnitChange){NULL, NULL, NULL};
+    changes[num_changes].type = strdup(ctype);
+    changes[num_changes].symlink_path = strdup(symlink_path);
+    changes[num_changes].dest = strdup(dest);
 
     num_changes++;
 
