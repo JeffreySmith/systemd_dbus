@@ -15,8 +15,14 @@ KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.
 """
+import warnings
 from .manager import SystemdManager
-from .unit import UnitFile
-from .polkit import PolkitRule
 
-__all__ = ["SystemdManager", "UnitFile", "PolkitRule"]
+__all__ = ["SystemdManager"]
+
+try:
+    from .unit import UnitFile
+    from .polkit import PolkitRule
+    __all__ += ["UnitFile", "PolkitRule"]
+except ImportError:
+    warnings.warn("Not running through Ambari, disabling 'UnitFile and 'PolkitRule'")
