@@ -332,14 +332,23 @@ class SystemdManager:
             except _sdbus.SystemdDBusError as e:
                 raise SystemdError("Failed to get Container property: {}".format(e))
 
-            container_types = {
-                "docker", "lxc", "lxc-libvirt", "lxc-oci", "rkt", "systemd-nspawn", "podman", "wsl", "proot", "pouch",
-            }
-            return val if val in container_types else None
-        else:
-            return self._fallback_container()
+            if val:
+                container_types = {
+                    "docker", "lxc", "lxc-libvirt", "lxc-oci", "rkt", "systemd-nspawn", "podman", "wsl", "proot", "pouch",
+                }
+
+                return val if val in container_types else None
+        # Checking dbus for this property doesn't always work, so if val is empty, try the fallback anyway
+        return self._fallback_container()
 
     def _fallback_container(self):
+        try:
+            with open("/run/systemd/container") as f:
+                val = f.read().strip()
+                return val if val else None
+        except OSError:
+            pass
+
         try:
             process = subprocess.Popen(
                 ["systemd-detect-virt", "--container"],
@@ -349,8 +358,26 @@ class SystemdManager:
             stdout, _ = process.communicate(timeout=5)
             if process.returncode == 0:
                 return stdout.decode().strip() or None
-            return None
+
 
         except (OSError, subprocess.TimeoutExpired) as e:
             warnings.warn("Error occured while trying to detect if we're running in a container: {}".format(e))
-            return None
+            pass
+
+        # Absolute last resort - if we still can't detect anything, we're probably not in a container
+        try:
+            container_types = {
+                    "docker", "lxc", "lxc-libvirt", "lxc-oci", "rkt", "systemd-nspawn", "podman", "wsl", "proot", "pouch",
+            }
+
+            with open("/proc/1/cgroup") as f:
+                cgroup = f.read().strip()
+                if "kubepods" in cgroup:
+                    return "kubernetes"
+                elif cgroup in container_types:
+                    return cgroup
+        except OSError:
+            pass
+
+        return None
+
