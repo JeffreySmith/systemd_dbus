@@ -35,11 +35,19 @@ _DBUS_METHODS = {
     "restart_unit": _sdbus.restart_unit,
 }
 
+
+class SystemdError(Exception):
+    pass
+
 class SystemdManager:
     _dbus_available = False
 
     def __init__(self):
-        SystemdManager._dbus_available = self._check_dbus()
+        self._dbus_available = SystemdManager._check_dbus()
+        self.container_type = self.container()
+        self._dbus_available = self.container_type is None
+        if self.container_type is not None:
+            warnings.warn("Running in container environment '{}', D-Bus will be unavailable".format(self.container_type))
 
     @classmethod
     def _check_dbus(cls):
@@ -119,8 +127,7 @@ class SystemdManager:
             )
             if code != 0:
                 raise SystemdError(
-                    f"systemctl {replaced_fn_name!r} failed for {unit_name!r} "
-                    f"through Ambari: {stderr.strip()}"
+                    "systemctl {!r} failed for {!r} through Ambari: {}".format(replaced_fn_name, unit_name, stderr.decode().strip())
                 )
             return stdout.strip()
         else:
@@ -128,7 +135,7 @@ class SystemdManager:
                 process = subprocess.Popen(command, stdout=subprocess.PIPE,
                                            stderr=subprocess.PIPE)
             except OSError as e:
-                raise SystemdError(f"Failed to execute systemctl command: {e}")
+                raise SystemdError("Failed to execute systemctl command: {}".format(e))
             try:
                 stdout, stderr = process.communicate(timeout=timeout)
             except subprocess.TimeoutExpired:
@@ -212,7 +219,7 @@ class SystemdManager:
 
     def enable(self, unit_name):
         """Enable a systemd unit. Returns a list of (type, symlink, dest) changes made."""
-        unit_name = unit_name if unit_name.endswith(".service") else f"{unit_name}.service"
+        unit_name = unit_name if unit_name.endswith(".service") else "{}.service".format(unit_name)
         if self._dbus_available:
             try:
                 _, changes = _sdbus.enable_unit(unit_name)
@@ -225,7 +232,7 @@ class SystemdManager:
 
     def disable(self, unit_name):
         """Disable a systemd unit. Returns a list of (type, symlink, dest) changes made."""
-        unit_name = unit_name if unit_name.endswith(".service") else f"{unit_name}.service"
+        unit_name = unit_name if unit_name.endswith(".service") else "{}.service".format(unit_name)
         if self._dbus_available:
             try:
                 return _sdbus.disable_unit(unit_name)
@@ -265,7 +272,7 @@ class SystemdManager:
 
     def pid(self, unit_name):
         """Get the main PID of a systemd unit. Returns None if not running."""
-        unit_name = unit_name if unit_name.endswith(".service") else f"{unit_name}.service"
+        unit_name = unit_name if unit_name.endswith(".service") else "{}.service".format(unit_name)
         if not self._dbus_available:
             raw = self._fallback_with_stdout(
                 "show", unit_name,
@@ -289,6 +296,7 @@ class SystemdManager:
             raise SystemdError("Failed to get MainPID for {!r}: {}".format(unit_name, e))
 
     def container(self):
+        """Returns None if it is not running in a container, or a string identifying the container type if it is"""
         if self._dbus_available:
             try:
                 val = _sdbus.get_property(
