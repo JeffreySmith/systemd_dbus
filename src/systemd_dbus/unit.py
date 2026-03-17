@@ -87,7 +87,7 @@ class Option:
             self.key = value
         elif index == 1:
             self.value = value
-        elif index == 3:
+        elif index == 2:
             self.comment = value
         else:
             raise IndexError("Index '{0}' out of range".format(index))
@@ -182,12 +182,13 @@ class Section:
         if not self.items:
             return ""
 
-        section = [
+        header = (
             "# {0}\n[{1}]".format(self.comment, self.name)
             if self.comment
             else "[{0}]".format(self.name),
-            *(str(item) for item in self.items),
-        ]
+        )
+
+        section = [header] + [str(item) for item in self.item]
 
         return "\n".join(section)
 
@@ -384,7 +385,7 @@ class UnitFile:
         new_value,
         comment=None,
         match=None,
-        **kwargs,
+        **kwargs
     ):
         """Update all keys that optionally match `match` with a new value and
         comment. When passing additional key-value pairs as kwargs, those keys

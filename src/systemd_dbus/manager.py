@@ -81,7 +81,7 @@ class SystemdManager:
                     warnings.warn("D-Bus permission denied for {}, attempting fallback".format(fn_name))
                     self._fallback_call(fn_name, unit_name)
                     return
-                raise SystemdError("{0} failed for {1!r}: {2}".format(fn_name, unit_name, msg)) from e
+                raise SystemdError("{0} failed for {1!r}: {2}".format(fn_name, unit_name, msg))
         else:
             self._fallback_call(fn_name, unit_name)
 
