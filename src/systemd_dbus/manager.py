@@ -19,7 +19,13 @@ under the License.
 import re
 import subprocess
 import warnings
-from systemd_dbus import _sdbus
+try:
+    from systemd_dbus import _sdbus
+    SDBUS_AVAILABLE=True
+except ImportError:
+    SDBUS_AVAILABLE=False
+    warnings.warn("sdbus library not available, falling back to systemctl for systemd management")
+
 
 try:
     from resource_management.core import shell
@@ -42,11 +48,12 @@ class SystemdManager:
     _dbus_available = False
 
     def __init__(self):
-        self._dbus_available = SystemdManager._check_dbus()
-        self.container_type = self.container()
-        self._dbus_available = self.container_type is None
-        if self.container_type is not None:
-            warnings.warn("Running in container environment '{}', D-Bus will be unavailable".format(self.container_type))
+        if SDBUS_AVAILABLE:
+            self._dbus_available = SystemdManager._check_dbus()
+            self.container_type = self.container()
+            self._dbus_available = self.container_type is None
+        else:
+            self._dbus_available = False
 
     @classmethod
     def _check_dbus(cls):

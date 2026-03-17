@@ -7,9 +7,16 @@ native = Extension(
     extra_compile_args=["-fPIC", "-Wall", "-Wextra", "-std=c99", "-Wundef"]
 )
 
+
 setup(
+    name="systemd-dbus",
+    version="0.2",
+    description="Thin Python bindings for a minimal set of systemd service management commands, using sd-bus",
+    author="Jeffrey Smith",
+    author_email="jeffrey.smith@acceldata.io",
+    license="Apache-2.0",
+    python_requires=">=2.7",
     ext_modules=[native],
     packages=find_packages(where="src"),
     package_dir={"": "src"},
 )
-
