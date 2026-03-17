@@ -25,6 +25,16 @@ under the License.
 #include <string.h>
 #include <systemd/sd-bus.h>
 
+const PropertyInfo known_properties[] = {
+    {"ActiveState", "org.freedesktop.systemd1.Unit", "s"},
+    {"SubState", "org.freedesktop.systemd1.Unit", "s"},
+    {"LoadState", "org.freedesktop.systemd1.Unit", "s"},
+    {"UnitFileState", "org.freedesktop.systemd1.Unit", "s"},
+    {"MainPID", "org.freedesktop.systemd1.Service", "u"},
+    {"ExecMainCode", "org.freedesktop.systemd1.Service", "i"},
+    {"ExecMainStatus", "org.freedesktop.systemd1.Service", "i"},
+    {NULL, NULL, NULL}};
+
 /**
  * @brief A lookup function to find the interface and type for a given property
  * name, if it's one of the known properties we care about. This is used to

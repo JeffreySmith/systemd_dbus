@@ -47,15 +47,7 @@ typedef struct {
   char *dest;
 } UnitChange;
 
-const PropertyInfo known_properties[] = {
-    {"ActiveState", "org.freedesktop.systemd1.Unit", "s"},
-    {"SubState", "org.freedesktop.systemd1.Unit", "s"},
-    {"LoadState", "org.freedesktop.systemd1.Unit", "s"},
-    {"UnitFileState", "org.freedesktop.systemd1.Unit", "s"},
-    {"MainPID", "org.freedesktop.systemd1.Service", "u"},
-    {"ExecMainCode", "org.freedesktop.systemd1.Service", "i"},
-    {"ExecMainStatus", "org.freedesktop.systemd1.Service", "i"},
-    {NULL, NULL, NULL}};
+extern const PropertyInfo known_properties[];
 
 int check_dbus_available(char *errbuf, size_t errbuf_len);
 
