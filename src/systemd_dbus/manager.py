@@ -315,7 +315,7 @@ class SystemdManager:
                     "org.freedesktop.systemd1",
                     "/org/freedesktop/systemd1",
                     "org.freedesktop.systemd1.Manager",
-                    "Container",
+                    "Virtualization",
                     "s",
                 )
             except _sdbus.SystemdDBusError as e:
