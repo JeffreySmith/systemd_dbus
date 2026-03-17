@@ -35,7 +35,6 @@ _DBUS_METHODS = {
     "restart_unit": _sdbus.restart_unit,
 }
 
-
 class SystemdError(Exception):
     pass
 
@@ -51,6 +50,8 @@ class SystemdManager:
 
     @classmethod
     def _check_dbus(cls):
+        """Check if D-Bus is available and functional. Returns True if available, False if not. Raises SystemdError for unexpected errors.
+        """
         try:
             return _sdbus.check_dbus_available()
         except _sdbus.SystemdDBusError as e:
@@ -58,6 +59,7 @@ class SystemdManager:
             return False
 
     def _call(self, fn_name, unit_name):
+        """Generic caller for start, stop, and restart."""
         unit_name = unit_name if unit_name.endswith(".service") else "{}.service".format(unit_name)
         if self._dbus_available:
             try:
@@ -78,6 +80,9 @@ class SystemdManager:
 
     def _fallback_call(self, fn_name, unit_name, timeout = 30,
                        additional_args = None):
+        """Fallback implementation using systemctl command. 
+        This is automatically run if DBus is not enabled, or some types of 
+        errors occur when running throug DBus."""
         replaced_fn_name = fn_name.replace("_unit", "")
         command = ["systemctl", replaced_fn_name, unit_name]
         if additional_args:
@@ -114,6 +119,10 @@ class SystemdManager:
 
     def _fallback_with_stdout(self, fn_name, unit_name, timeout = 30,
                               additional_args = None):
+        """Fallback implementation using systemctl command. 
+        This is automatically run if DBus is not enabled, or some types of 
+        errors occur when running throug DBus. Also returns stdout."""
+
         replaced_fn_name = fn_name.replace("_unit", "")
         command = ["systemctl", replaced_fn_name, unit_name]
         if additional_args:
@@ -152,6 +161,7 @@ class SystemdManager:
 
     def _get_property(self, destination, path, interface,
                       property, dbus_type):
+        """Get a property value from DBus."""
         try:
             return _sdbus.get_property(destination, path, interface,
                                        property, dbus_type)
@@ -174,6 +184,8 @@ class SystemdManager:
             self._fallback_reload()
 
     def _fallback_reload(self, timeout = 30):
+        """Fallback implementation of daemon reload using systemctl command. This is automatically run if DBus is not enabled, or if permission is denied when attempting to reload through DBus.
+        """
         if AMBARI_AVAILABLE:
             code, _, stderr = shell.checked_call(
                 ("systemctl", "daemon-reload"),

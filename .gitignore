@@ -141,3 +141,5 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+src/systemd_dbus/c/docs
