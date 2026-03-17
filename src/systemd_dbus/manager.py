@@ -309,10 +309,14 @@ class SystemdManager:
                 )
 
         try:
-            pid = _sdbus.get_unit_property(unit_name, "MainPID")
+            # This should only ever return a number that can fit into an int, but because of the Python 2 api, 
+            # can return as a long. If we convert it to an int that can be used by an external process.
+            pid = int(_sdbus.get_unit_property(unit_name, "MainPID"))
             return pid if pid != 0 else None
         except _sdbus.SystemdDBusError as e:
             raise SystemdError("Failed to get MainPID for {!r}: {}".format(unit_name, e))
+        except ValueError as e:
+            raise SystemdError("MainPID for {!r} not a valid number: {}. This is likely a bug in the c code".format(unit_name, e))
 
     def container(self):
         """Returns None if it is not running in a container, or a string identifying the container type if it is"""
