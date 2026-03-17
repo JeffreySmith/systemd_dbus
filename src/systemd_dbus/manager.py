@@ -19,7 +19,7 @@ under the License.
 import re
 import subprocess
 import warnings
-import _sdbus
+from systemd_dbus import _sdbus
 
 try:
     from resource_management.core import shell
