@@ -222,12 +222,13 @@ cleanup:
  * otherwise
  */
 
-int ping_dbus(sd_bus *bus, char *erbuf, size_t errbuf_len) {
-  sd_bus_error = SD_BUS_ERROR_NULL;
+int ping_dbus(sd_bus *bus, char *erebuf, size_t errbuf_len) {
+  sd_bus_error err = SD_BUS_ERROR_NULL;
   sd_bus_message *reply = NULL;
-  memset(erbuf, 0, errbuf_len);
+  int r;
+  memset(errbuf, 0, errbuf_len);
   if (bus == NULL) {
-    snprintf(erbuf, errbuf_len, "Bus connection is not initialized");
+    snprintf(errbuf, errbuf_len, "Bus connection is not initialized");
     return -ENOTCONN;
   }
 
