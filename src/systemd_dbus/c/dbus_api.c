@@ -261,7 +261,6 @@ int ping_dbus(sd_bus *bus, char *erbuf, size_t errbuf_len) {
  */
 int call_method(sd_bus *bus, const char *method, const char *unit, char *errbuf,
                 size_t errbuf_len) {
-  sd_bus *bus = NULL;
   sd_bus_error err = SD_BUS_ERROR_NULL;
   sd_bus_message *reply = NULL;
 
@@ -671,6 +670,7 @@ int daemon_reload(sd_bus *bus, char *errbuf, size_t errbuf_len) {
   sd_bus_error err = SD_BUS_ERROR_NULL;
   sd_bus_message *reply = NULL;
 
+  int r;
   memset(errbuf, 0, errbuf_len);
   if (bus == NULL) {
     snprintf(errbuf, errbuf_len, "Bus connection is not initialized");
@@ -688,7 +688,6 @@ int daemon_reload(sd_bus *bus, char *errbuf, size_t errbuf_len) {
       snprintf(errbuf, errbuf_len, "Daemon reload failed: %s", strerror(-r));
     }
   }
-cleanup:
   sd_bus_error_free(&err);
   sd_bus_message_unref(reply);
   return r < 0 ? r : 0;
