@@ -1,0 +1,6 @@
+include src/systemd_dbus/c/*.h
+include src/systemd_dbus/c/*.c
+include LICENSE
+include LICENSES/LICENSE.LGPL2.1
+include NOTICE
+include README.md

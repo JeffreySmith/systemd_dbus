@@ -13,8 +13,16 @@ software distributed under the License is distributed on an
 "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
 KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
-under the License.    
+under the License.
 """
-from .manager import SystemdManager, SystemdError
+import warnings
+from .manager import SystemdManager
 
-__all__ = ["SystemdManager", "SystemdError"]
+__all__ = ["SystemdManager"]
+
+try:
+    from .unit import UnitFile
+    from .polkit import PolkitRule
+    __all__ += ["UnitFile", "PolkitRule"]
+except ImportError:
+    warnings.warn("Not running through Ambari, disabling 'UnitFile and 'PolkitRule'")

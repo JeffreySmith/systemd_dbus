@@ -1,0 +1,429 @@
+/*Licensed to the Apache Software Foundation (ASF) under one
+or more contributor license agreements.  See the NOTICE file
+distributed with this work for additional information
+regarding copyright ownership.  The ASF licenses this file
+to you under the Apache License, Version 2.0 (the
+"License"); you may not use this file except in compliance
+with the License.  You may obtain a copy of the License at
+
+  http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing,
+software distributed under the License is distributed on an
+"AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+KIND, either express or implied.  See the License for the
+specific language governing permissions and limitations
+under the License.
+*/
+#include "dbus_api.h"
+#include <Python.h>
+#include <assert.h>
+#include <errno.h>
+#include <inttypes.h>
+#include <stddef.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <systemd/sd-bus.h>
+// Some of the C api changed between Python 2 and 3
+#if PY_MAJOR_VERSION < 3
+#define PyLong_FromLong PyInt_FromLong
+#define PyUnicode_FromString PyString_FromString
+#endif
+
+// Define a generic holder for Systemd errors
+static PyObject *SystemdDBusError = NULL;
+
+static const PropertyInfo *lookup_property(const char *property) {
+  for (const PropertyInfo *p = known_properties; p->property; p++) {
+    if (strcmp(p->property, property) == 0) {
+      return p;
+    }
+  }
+  return NULL;
+}
+
+static void free_unit_changes(UnitChange *changes, size_t num) {
+  if (!changes)
+    return;
+
+  for (size_t i = 0; i < num; i++) {
+    free(changes[i].type);
+    free(changes[i].symlink_path);
+    free(changes[i].dest);
+    changes[i].type = NULL;
+    changes[i].symlink_path = NULL;
+    changes[i].dest = NULL;
+  }
+  free(changes);
+}
+
+PyObject *py_check_dbus_available(PyObject *self, PyObject *args) {
+  char errbuf[1024] = {0};
+  int r;
+
+  // clang-format off
+  Py_BEGIN_ALLOW_THREADS
+    r = check_dbus_available(errbuf, sizeof(errbuf));
+  Py_END_ALLOW_THREADS
+
+  if (r < 0) {
+    PyErr_SetString(SystemdDBusError, errbuf);
+    return NULL;
+  }
+  // clang-format on
+  // This is actually returning, ignore any static checkers
+  Py_RETURN_TRUE;
+}
+
+static PyObject *py_start_unit(PyObject *self, PyObject *args) {
+  const char *unit;
+  char errbuf[1024] = {0};
+  int r;
+
+  if (!PyArg_ParseTuple(args, "s", &unit)) {
+    return NULL;
+  }
+
+  // clang-format off
+  Py_BEGIN_ALLOW_THREADS
+    r = call_method("StartUnit", unit, errbuf, sizeof(errbuf));
+  Py_END_ALLOW_THREADS
+
+  if (r < 0) {
+    PyErr_SetString(SystemdDBusError, errbuf);
+    return NULL;
+  }
+  // clang-format on
+  // This is actually returning, ignore any static checkers
+  Py_RETURN_NONE;
+}
+
+static PyObject *py_stop_unit(PyObject *self, PyObject *args) {
+  const char *unit;
+  char errbuf[1024] = {0};
+  int r;
+
+  if (!PyArg_ParseTuple(args, "s", &unit)) {
+    return NULL;
+  }
+
+  // clang-format off
+  Py_BEGIN_ALLOW_THREADS
+    r = call_method("StopUnit", unit, errbuf, sizeof(errbuf));
+  Py_END_ALLOW_THREADS
+
+  if (r < 0) {
+    PyErr_SetString(SystemdDBusError, errbuf);
+    return NULL;
+  }
+  // clang-format on
+  // This is actually returning, ignore any static checkers
+  Py_RETURN_NONE;
+}
+
+static PyObject *py_restart_unit(PyObject *self, PyObject *args) {
+  const char *unit;
+  char errbuf[1024] = {0};
+  int r;
+
+  if (!PyArg_ParseTuple(args, "s", &unit)) {
+    return NULL;
+  }
+
+  // clang-format off
+  Py_BEGIN_ALLOW_THREADS
+    r = call_method("RestartUnit", unit, errbuf, sizeof(errbuf));
+  Py_END_ALLOW_THREADS
+
+  if (r < 0) {
+    PyErr_SetString(SystemdDBusError, errbuf);
+    return NULL;
+  }
+  // clang-format on
+  // This is actually returning, ignore any static checkers
+  Py_RETURN_NONE;
+}
+
+static PyObject *dbus_val_to_python(const DBusValue *val) {
+  switch (val->type) {
+  case 's':
+    return PyUnicode_FromString(val->s_buf);
+  case 'u':
+    return PyLong_FromUnsignedLong(val->val.u);
+  case 'i':
+    return PyLong_FromLong(val->val.i);
+  case 't':
+    return PyLong_FromUnsignedLongLong(val->val.t);
+  case 'x':
+    return PyLong_FromLongLong(val->val.x);
+  case 'b':
+    return PyBool_FromLong(val->val.b);
+  default:
+    PyErr_Format(SystemdDBusError, "Unsupported DBus type: %c", val->type);
+    Py_RETURN_NONE;
+  }
+}
+
+static PyObject *py_get_unit_property(PyObject *self, PyObject *args) {
+  const char *unit_name;
+  const char *property;
+  const char *interface;
+  const char *type;
+
+  char errbuf[1024] = {0};
+  DBusValue val = {0};
+  int r;
+
+  if (!PyArg_ParseTuple(args, "ss", &unit_name, &property)) {
+    return NULL;
+  }
+  const PropertyInfo *info = lookup_property(property);
+  if (!info) {
+    PyErr_Format(PyExc_ValueError, "Unknown property: %s", property);
+    return NULL;
+  }
+
+  // clang-format off
+Py_BEGIN_ALLOW_THREADS
+  r = get_unit_property_raw(
+    unit_name,
+    property,
+    info->interface,
+    info->type,
+    &val,
+    errbuf,
+    sizeof(errbuf)
+  );
+Py_END_ALLOW_THREADS
+  if (r < 0) {
+    PyErr_SetString(SystemdDBusError, errbuf);
+    return NULL;
+  }
+
+  return dbus_val_to_python(&val);
+  //clang-format on
+}
+
+
+static PyObject *py_get_property(PyObject *self, PyObject *args) {
+  const char *destination;
+  const char *path;
+  const char *interface;
+  const char *property;
+  const char *type;
+
+  DBusValue val = {0};
+
+  char errbuf[1024] = {0};
+  int r;
+
+  if (!PyArg_ParseTuple(args, "sssss", &destination, &path, &interface,
+                        &property, &type)) {
+    return NULL;
+  }
+  switch (type[0]) {
+    case 's': case 'u': case 'i': case 't': case 'x': case 'b':
+      break;
+    default:
+      PyErr_Format(PyExc_ValueError, "Unsupported D-Bus type: %s", type);
+      return NULL;
+  }
+  // clang-format off
+Py_BEGIN_ALLOW_THREADS
+  r = get_property(destination, path, interface, property, type, &val, errbuf, sizeof(errbuf));
+
+Py_END_ALLOW_THREADS
+  if (r < 0) {
+    PyErr_SetString(SystemdDBusError, errbuf);
+    return NULL;
+  }
+  return dbus_val_to_python(&val);
+  //clang-format on
+}
+
+static PyObject *build_changes_list(UnitChange *changes, size_t num_changes) {
+  PyObject *list = PyList_New(num_changes);
+  if (!list) return NULL;
+
+  for (size_t i = 0; i < num_changes; i++) {
+    PyObject *type_str = PyUnicode_FromString(changes[i].type);
+    PyObject *sym_str  = PyUnicode_FromString(changes[i].symlink_path);
+    PyObject *dest_str = PyUnicode_FromString(changes[i].dest);
+
+    if (!type_str || !sym_str || !dest_str) {
+      Py_XDECREF(type_str);
+      Py_XDECREF(sym_str);
+      Py_XDECREF(dest_str);
+      Py_DECREF(list);
+      return NULL;
+    }
+
+    PyObject *tuple = PyTuple_Pack(3, type_str, sym_str, dest_str);
+    Py_DECREF(type_str);
+    Py_DECREF(sym_str);
+    Py_DECREF(dest_str);
+
+    if (!tuple) {
+      Py_DECREF(list);
+      return NULL;
+    }
+    PyList_SET_ITEM(list, i, tuple);
+  }
+  return list;
+}
+
+
+static PyObject *py_enable_unit(PyObject *self, PyObject *args) {
+  const char *unit;
+  char errbuf[1024] = {0};
+  // carries_install_info reports back true if there is an [Install] section in the unit file
+  int r, carries_install_info = 0;
+  UnitChange *changes = NULL;
+  size_t num_changes = 0;
+
+  if (!PyArg_ParseTuple(args, "s", &unit)){
+    return NULL;
+  }
+  // clang-format off
+  Py_BEGIN_ALLOW_THREADS
+    r = enable_unit(unit, &carries_install_info, &changes, &num_changes,
+        errbuf, sizeof(errbuf));
+  Py_END_ALLOW_THREADS
+  //clang-format on
+  if (r < 0) {
+    free_unit_changes(changes, num_changes);
+    PyErr_SetString(SystemdDBusError, errbuf);
+    return NULL;
+  }
+
+  PyObject *changes_list = build_changes_list(changes, num_changes);
+  free_unit_changes(changes, num_changes);
+  if (!changes_list) return NULL;
+
+  PyObject *carries_obj = PyBool_FromLong(carries_install_info);
+  if (!carries_obj) {
+    Py_DECREF(changes_list);
+    return NULL;
+  }
+
+  PyObject *result = PyTuple_Pack(2, carries_obj, changes_list);
+  Py_DECREF(carries_obj);
+  Py_DECREF(changes_list);
+  return result;
+}
+
+static PyObject *py_disable_unit(PyObject *self, PyObject *args) {
+  const char *unit;
+  char errbuf[1024] = {0};
+  int r;
+  UnitChange *changes = NULL;
+  size_t num_changes = 0;
+
+  if (!PyArg_ParseTuple(args, "s", &unit)){
+    return NULL;
+  }
+  // clang-format off
+  Py_BEGIN_ALLOW_THREADS
+    r = disable_unit(unit, &changes, &num_changes, errbuf, sizeof(errbuf));
+  Py_END_ALLOW_THREADS
+  // clang-format off
+
+  if (r < 0) {
+    free_unit_changes(changes, num_changes);
+    PyErr_SetString(SystemdDBusError, errbuf);
+    return NULL;
+  }
+
+  PyObject *changes_list = build_changes_list(changes, num_changes);
+  free_unit_changes(changes, num_changes);
+  return changes_list;
+}
+
+PyObject *py_daemon_reload(PyObject *self, PyObject *args) {
+  char errbuf[1024] = {0};
+  int r;
+
+  // clang-format off
+  Py_BEGIN_ALLOW_THREADS
+    r = daemon_reload(errbuf, sizeof(errbuf));
+  Py_END_ALLOW_THREADS
+
+  if (r < 0) {
+    PyErr_SetString(SystemdDBusError, errbuf);
+    return NULL;
+  }
+  // clang-format on
+  // This is actually returning, ignore any static checkers
+  Py_RETURN_NONE;
+}
+
+static struct PyMethodDef sdbus_methods[] = {
+    {"start_unit", py_start_unit, METH_VARARGS,
+     "start_unit(unit_name) -> None\n\nStart a Systemd unit file on the "
+     "system bus.\n Raises SystemdDbusError on failure.\n\n :param unit_name: "
+     "The name of the unit (eg. sshd.service)\n\n:raises SystemdDbusError: If "
+     "some error occurs while trying to start the service.\n "},
+    {"stop_unit", py_stop_unit, METH_VARARGS,
+     "stop_unit(unit_name) -> None\n\nStop a Systemd unit file on the system "
+     "bus.\n :param unit_name: The name of the service to stop (eg "
+     "'sshd.service')\n:raises SystemdDbusError: If some error occurs while "
+     "trying to stop the service.\n "},
+    {"restart_unit", py_restart_unit, METH_VARARGS,
+     "restart_unit(unit_name) -> None\n\nRestart a Systemd unit file on the "
+     "system bus.\n\n :param unit_name: The name of the service to restart (eg "
+     "'sshd.service')\n:raises SystemdDbusError: If some error occurs while "
+     "restarting the service.\n"},
+    {"get_unit_property", py_get_unit_property, METH_VARARGS,
+     "get_unit_property(unit_name, property) -> str | int | bool\n\n Get a "
+     "property of a Systemd service on the system bus.\n\n"},
+    {"enable_unit", py_enable_unit, METH_VARARGS,
+     "enable_unit(unit_name) -> None\n\nEnable a Systemd unit file on the "
+     "system bus.\n\n :param unit_name: The name of the service to "
+     "enable\n:raises SystemdDbusError: If some error occurs while enabling "
+     "the service.\n"},
+    {"disable_unit", py_disable_unit, METH_VARARGS,
+     "disable_unit(unit_name) -> None\n\nDisable a systemd unit file on the "
+     "system bus\n\n :param unit_name: The name of the service to "
+     "disable\n:raises SystemdDbusError: If some error occurs while disabling "
+     "the service.\n"},
+    {"daemon_reload", py_daemon_reload, METH_NOARGS,
+     "daemon_reload() -> None\nReload the Systemd daemon.\n\n:raises "
+     "SystemDBusError: If some error occurs while reloading the Systemd "
+     "daemon.\n"},
+    {"check_dbus_available", py_check_dbus_available, METH_NOARGS,
+     "check_dbus_available() -> bool\n Check if DBus is available to use\n\n:"},
+    {"get_property", py_get_property, METH_VARARGS, "Get a Systemd Property"},
+    // The last one must always be NULL
+    {NULL, NULL, 0, NULL}};
+
+static PyObject *_init_module(void) {
+  PyObject *m;
+#if PY_MAJOR_VERSION >= 3
+  static struct PyModuleDef moduledef = {PyModuleDef_HEAD_INIT, "_sdbus", NULL,
+                                         -1, sdbus_methods};
+  m = PyModule_Create(&moduledef);
+#else
+  m = Py_InitModule("_sdbus", sdbus_methods);
+#endif
+
+  if (!m) {
+    return NULL;
+  }
+
+  SystemdDBusError = PyErr_NewException("systemd_dbus._sdbus.SystemdDBusError",
+                                        PyExc_OSError, NULL);
+
+  if (!SystemdDBusError) {
+    return NULL;
+  }
+  Py_INCREF(SystemdDBusError);
+  PyModule_AddObject(m, "SystemdDBusError", SystemdDBusError);
+  return m;
+}
+
+#if PY_MAJOR_VERSION >= 3
+PyMODINIT_FUNC PyInit__sdbus(void) { return _init_module(); }
+#else
+PyMODINIT_FUNC init_sdbus(void) { _init_module(); }
+#endif
