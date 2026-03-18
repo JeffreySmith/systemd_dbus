@@ -48,10 +48,16 @@ class SystemdManager:
     _dbus_available = False
 
     def __init__(self):
+        self._bus = None
         if SDBUS_AVAILABLE:
             self._dbus_available = SystemdManager._check_dbus()
             self.container_type = self.container()
             self._dbus_available = self.container_type is None
+            if self._dbus_available:
+                try:
+                    self._bus = _sdbus.Bus()
+                except _sdbus.SystemdDBusError as e:
+                    warnings.warn("Failed to connect to D-Bus, falling back to systemctl: {}".format(e))
         else:
             self._dbus_available = False
 
@@ -65,15 +71,31 @@ class SystemdManager:
             warnings.warn("D-Bus unavailable, falling back to systemctl: {}".format(e))
             return False
 
+    def close(self):
+        """A function to manually close the dbus connection. Will automatically be called when the class is garbage collected."""
+        if self._bus is not None:
+            try:
+                self._bus.__exit__(None, None, None)
+            except Exception:
+                pass
+            finally:
+                self._bus = None
+
+    def __del__(self):
+        try:
+            self.close()
+        except Exception:
+            pass
+
     def _call(self, fn_name, unit_name):
         """Generic caller for start, stop, and restart."""
         unit_name = unit_name if unit_name.endswith(".service") else "{}.service".format(unit_name)
-        if self._dbus_available:
+        if self._dbus_available and self._bus is not None:
             try:
                 fn = _DBUS_METHODS.get(fn_name)
                 if fn is None:
                     raise SystemdError("Unsupported D-Bus method: {}".format(fn_name))
-                fn(unit_name)
+                fn(self._bus, unit_name)
             except _sdbus.SystemdDBusError as e:
                 msg = str(e)
                 msg_lower = msg.lower()
@@ -170,7 +192,7 @@ class SystemdManager:
                       property, dbus_type):
         """Get a property value from DBus."""
         try:
-            return _sdbus.get_property(destination, path, interface,
+            return _sdbus.get_property(self._bus, destination, path, interface,
                                        property, dbus_type)
         except _sdbus.SystemdDBusError as e:
             raise SystemdError("Failed to get {!r}: {}".format(property, e))
@@ -179,7 +201,7 @@ class SystemdManager:
         """Reload the systemd daemon to pick up any changes to unit files."""
         if self._dbus_available:
             try:
-                _sdbus.daemon_reload()
+                _sdbus.daemon_reload(self._bus)
             except _sdbus.SystemdDBusError as e:
                 msg = str(e)
                 if "Interactive authentication" in msg:
@@ -241,7 +263,7 @@ class SystemdManager:
         unit_name = unit_name if unit_name.endswith(".service") else "{}.service".format(unit_name)
         if self._dbus_available:
             try:
-                _, changes = _sdbus.enable_unit(unit_name)
+                _, changes = _sdbus.enable_unit(self._bus, unit_name)
                 return changes
             except _sdbus.SystemdDBusError as e:
                 raise SystemdError("enable_unit failed for {!r}: {}".format(unit_name, e))
@@ -254,7 +276,7 @@ class SystemdManager:
         unit_name = unit_name if unit_name.endswith(".service") else "{}.service".format(unit_name)
         if self._dbus_available:
             try:
-                return _sdbus.disable_unit(unit_name)
+                return _sdbus.disable_unit(self._bus, unit_name)
             except _sdbus.SystemdDBusError as e:
                 raise SystemdError("disable_unit failed for {!r}: {}".format(unit_name, e))
         else:
@@ -279,7 +301,7 @@ class SystemdManager:
 
     def timezone(self):
         """Get the system timezone. Returns None if D-Bus is unavailable."""
-        if not self._dbus_available:
+        if not self._dbus_available or not self._bus:
             return None
         return self._get_property(
             "org.freedesktop.timedate1",
@@ -311,7 +333,7 @@ class SystemdManager:
         try:
             # This should only ever return a number that can fit into an int, but because of the Python 2 api, 
             # can return as a long. If we convert it to an int that can be used by an external process.
-            pid = int(_sdbus.get_unit_property(unit_name, "MainPID"))
+            pid = int(_sdbus.get_unit_property(self._bus, unit_name, "MainPID"))
             return pid if pid != 0 else None
         except _sdbus.SystemdDBusError as e:
             raise SystemdError("Failed to get MainPID for {!r}: {}".format(unit_name, e))
