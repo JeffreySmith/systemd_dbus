@@ -222,7 +222,7 @@ cleanup:
  * otherwise
  */
 
-int ping_dbus(sdbus *bus, char *erbuf, size_t errbuf_len) {
+int ping_dbus(sd_bus *bus, char *erbuf, size_t errbuf_len) {
   sd_bus_error = SD_BUS_ERROR_NULL;
   sd_bus_message *reply = NULL;
   memset(erbuf, 0, errbuf_len);

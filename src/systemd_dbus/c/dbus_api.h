@@ -51,7 +51,7 @@ extern const PropertyInfo known_properties[];
 
 int check_dbus_available(char *errbuf, size_t errbuf_len);
 
-int ping_dbus(sdbus *bus, char *errbuf, size_t errbuf_len);
+int ping_dbus(sd_bus *bus, char *errbuf, size_t errbuf_len);
 
 int call_method(sd_bus *bus, const char *method, const char *unit, char *errbuf,
                        size_t errbuf_len);
