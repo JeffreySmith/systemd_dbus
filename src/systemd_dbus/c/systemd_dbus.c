@@ -49,7 +49,7 @@ static void Bus_dealloc(BusObject *self) {
 static PyObject *Bus_new(PyTypeObject *type, PyObject *args, PyObject *kwds) {
   BusObject *self = (BusObject *)type->tp_alloc(type, 0);
   if (!self) {
-    sprintf(stderr, "Failed to initialize Bus");
+    fprintf(stderr, "Failed to initialize Bus");
     return PyErr_NoMemory();
   }
   self->bus = NULL;
