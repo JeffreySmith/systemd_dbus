@@ -21,12 +21,17 @@ from unittest.mock import MagicMock, patch
 
 @pytest.fixture
 def mock_sdbus():
-    with patch("systemd_dbus.manager._sdbus") as mock:
+    with patch("systemd_dbus.manager._sdbus") as mock, \
+        patch("systemd_dbus.manager.SDBUS_AVAILABLE", True), \
+        patch("systemd_dbus.manager._SystemdDBusError", Exception):
+
         class MockSystemdDbusError(Exception):
             pass
+
         mock.SystemdDbusError = MockSystemdDbusError
         mock.Bus.return_value = MagicMock()
-        mock.check_dbus_available.return_value = True
+        mock.container.return_value = ""
+        mock.test_check_dbus_available.return_value = True
         mock.get_unit_property.return_value = "active"
         mock.get_property.return_value = ""
 
@@ -42,7 +47,7 @@ def manager(mock_sdbus):
     m._dbus_available = True
     m._bus = mock_sdbus.Bus.return_value
 
-    return m
+    yield m
 
 def test_active_true(manager, mock_sdbus):
     mock_sdbus.get_unit_property.return_value = "active"
