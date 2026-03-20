@@ -23,8 +23,7 @@ under the License.
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-// #include <systemd/sd-bus.h>
-#include "sd-bus.h"
+#include <systemd/sd-bus.h>
 
 const PropertyInfo known_properties[] = {
     {"ActiveState", "org.freedesktop.systemd1.Unit", "s"},

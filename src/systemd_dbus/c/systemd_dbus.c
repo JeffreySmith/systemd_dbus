@@ -24,8 +24,7 @@ under the License.
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-// #include <systemd/sd-bus.h>
-#include "sd-bus.h"
+#include <systemd/sd-bus.h>
 // Some of the C api changed between Python 2 and 3
 #if PY_MAJOR_VERSION < 3
 #define PyLong_FromLong PyInt_FromLong
