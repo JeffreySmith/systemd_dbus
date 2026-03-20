@@ -456,8 +456,8 @@ int get_property(sd_bus *bus, const char *destination, const char *path,
     return -ENOTCONN;
   }
 
-  r = sd_bus_get_property(bus, destination, path, interface, property, &err,
-                          &reply, type);
+  r = sd_bus_get_property(bus->bus, destination, path, interface, property,
+                          &err, &reply, type);
   if (r < 0) {
     snprintf(errbuf, errbuf_len, "%s",
              err.message ? err.message : strerror(-r));
