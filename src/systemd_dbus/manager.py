@@ -19,6 +19,7 @@ under the License.
 import re
 import subprocess
 import warnings
+import syslog
 try:
     from systemd_dbus import _sdbus
     SDBUS_AVAILABLE=True
@@ -340,37 +341,29 @@ class SystemdManager:
         except ValueError as e:
             raise SystemdError("MainPID for {!r} not a valid number: {}. This is likely a bug in the c code".format(unit_name, e))
 
-    def container(self):
-        """Returns None if it is not running in a container, or a string identifying the container type if it is"""
+    def virtualization(self):
+        """Returns None if it is not running in some virtualization, or a string identifying the type if it is"""
         if self._dbus_available:
             try:
                 val = _sdbus.get_property(
+                    self._bus,
                     "org.freedesktop.systemd1",
                     "/org/freedesktop/systemd1",
                     "org.freedesktop.systemd1.Manager",
                     "Virtualization",
                     "s",
                 )
-            except _sdbus.SystemdDBusError as e:
-                raise SystemdError("Failed to get Container property: {}".format(e))
-
-            if val:
-                container_types = {
-                    "docker", "lxc", "lxc-libvirt", "lxc-oci", "rkt", "systemd-nspawn", "podman", "wsl", "proot", "pouch",
-                }
-
-                return val if val in container_types else None
-        # Checking dbus for this property doesn't always work, so if val is empty, try the fallback anyway
-        return self._fallback_container()
-
-    def _fallback_container(self):
-        try:
-            with open("/run/systemd/container") as f:
-                val = f.read().strip()
                 return val if val else None
-        except OSError:
-            pass
+            except _sdbus.SystemdDBusError as e:
+                raise SystemdError("Failed to get virtualization property: {}".format(e))
 
+        else:
+            return None
+
+    def container(self):
+        # systemd-detect-virt is probably the best way to figure out if we're in a container.
+        # It does a lot of different things to try to determine if it's running in a container and is more
+        # reliable than checking the dbus property
         try:
             process = subprocess.Popen(
                 ["systemd-detect-virt", "--container"],
@@ -385,6 +378,14 @@ class SystemdManager:
         except (OSError, subprocess.TimeoutExpired) as e:
             warnings.warn("Error occured while trying to detect if we're running in a container: {}".format(e))
             pass
+
+        try:
+            with open("/run/systemd/container") as f:
+                val = f.read().strip()
+                return val if val else None
+        except OSError:
+            pass
+
 
         # Absolute last resort - if we still can't detect anything, we're probably not in a container
         try:
@@ -402,4 +403,12 @@ class SystemdManager:
             pass
 
         return None
+
+    def log(self, message, log_level=syslog.LOG_INFO):
+        """Log a message to syslog, which should log to journald. 
+        Valid log levels can be found in the syslog module.
+        By default, it is set to LOG_INFO.
+        """
+        syslog.syslog(log_level, message)
+
 

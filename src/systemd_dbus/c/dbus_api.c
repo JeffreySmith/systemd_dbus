@@ -23,7 +23,8 @@ under the License.
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <systemd/sd-bus.h>
+// #include <systemd/sd-bus.h>
+#include "sd-bus.h"
 
 const PropertyInfo known_properties[] = {
     {"ActiveState", "org.freedesktop.systemd1.Unit", "s"},
@@ -222,7 +223,7 @@ cleanup:
  * otherwise
  */
 
-int ping_dbus(sd_bus *bus, char *erebuf, size_t errbuf_len) {
+int ping_dbus(sd_bus *bus, char *errbuf, size_t errbuf_len) {
   sd_bus_error err = SD_BUS_ERROR_NULL;
   sd_bus_message *reply = NULL;
   int r;

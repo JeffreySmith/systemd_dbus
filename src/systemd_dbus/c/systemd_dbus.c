@@ -24,7 +24,8 @@ under the License.
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <systemd/sd-bus.h>
+// #include <systemd/sd-bus.h>
+#include "sd-bus.h"
 // Some of the C api changed between Python 2 and 3
 #if PY_MAJOR_VERSION < 3
 #define PyLong_FromLong PyInt_FromLong
@@ -49,7 +50,8 @@ static void Bus_dealloc(BusObject *self) {
 static PyObject *Bus_new(PyTypeObject *type, PyObject *args, PyObject *kwds) {
   BusObject *self = (BusObject *)type->tp_alloc(type, 0);
   if (!self) {
-    return NULL;
+    sprintf(stderr, "Failed to initialize Bus");
+    return PyErr_NoMemory();
   }
   self->bus = NULL;
   return (PyObject *)self;
@@ -64,16 +66,9 @@ static int Bus_init(BusObject *self, PyObject *args, PyObject *kwds) {
     snprintf(errbuf, sizeof(errbuf), "Failed to connect to system bus: %s",
              strerror(-r));
     PyErr_SetString(SystemdDBusError, errbuf);
-    return -1;
   }
 
-  r = sd_bus_start(self->bus);
-  if (r < 0) {
-    PyErr_Format(SystemdDBusError, "Failed to start bus connection: %s",
-                 strerror(-r));
-  }
-
-  return 0;
+  return r < 0 ? r : 0;
 }
 
 static PyObject *Bus_enter(BusObject *self, PyObject *args) {
@@ -184,6 +179,8 @@ static PyObject *py_start_unit(PyObject *self, PyObject *args) {
   char errbuf[1024] = {0};
   int r;
 
+  char *unit_copy = NULL;
+
   if (!PyArg_ParseTuple(args, "O!s", &BusType, &bus, &unit)) {
     return NULL;
   }
@@ -193,10 +190,18 @@ static PyObject *py_start_unit(PyObject *self, PyObject *args) {
     return NULL;
   }
 
+  unit_copy = strdup(unit);
+  if (!unit_copy) {
+    return PyErr_NoMemory();
+  }
+
   // clang-format off
   Py_BEGIN_ALLOW_THREADS
-    r = call_method(bus->bus, "StartUnit", unit, errbuf, sizeof(errbuf));
+    r = call_method(bus->bus, "StartUnit", unit_copy, errbuf, sizeof(errbuf));
   Py_END_ALLOW_THREADS
+  
+  free(unit_copy);
+  unit_copy = NULL;
 
   if (r < 0) {
     PyErr_SetString(SystemdDBusError, errbuf);
@@ -213,6 +218,8 @@ static PyObject *py_stop_unit(PyObject *self, PyObject *args) {
   char errbuf[1024] = {0};
   int r;
 
+  char *unit_copy = NULL;
+
   if (!PyArg_ParseTuple(args, "O!s", &BusType, &bus, &unit)) {
     return NULL;
   }
@@ -222,10 +229,18 @@ static PyObject *py_stop_unit(PyObject *self, PyObject *args) {
     return NULL;
   }
 
+  unit_copy = strdup(unit);
+  if (!unit_copy) {
+    return PyErr_NoMemory();
+  }
+
   // clang-format off
   Py_BEGIN_ALLOW_THREADS
-    r = call_method(bus, "StopUnit", unit, errbuf, sizeof(errbuf));
+    r = call_method(bus, "StopUnit", unit_copy, errbuf, sizeof(errbuf));
   Py_END_ALLOW_THREADS
+
+  free(unit_copy);
+  unit_copy = NULL;
 
   if (r < 0) {
     PyErr_SetString(SystemdDBusError, errbuf);
@@ -241,7 +256,7 @@ static PyObject *py_restart_unit(PyObject *self, PyObject *args) {
   const char *unit;
   char errbuf[1024] = {0};
   int r;
-
+  char *unit_copy = NULL;
   if (!PyArg_ParseTuple(args, "O!s", &BusType, &bus, &unit)) {
     return NULL;
   }
@@ -251,10 +266,18 @@ static PyObject *py_restart_unit(PyObject *self, PyObject *args) {
     return NULL;
   }
 
+  unit_copy = strdup(unit);
+  if (!unit_copy) {
+    return PyErr_NoMemory();
+  }
+
   // clang-format off
   Py_BEGIN_ALLOW_THREADS
     r = call_method(bus->bus, "RestartUnit", unit, errbuf, sizeof(errbuf));
   Py_END_ALLOW_THREADS
+
+  free(unit_copy);
+  unit_copy = NULL;
 
   if (r < 0) {
     PyErr_SetString(SystemdDBusError, errbuf);
@@ -288,9 +311,10 @@ static PyObject *dbus_val_to_python(const DBusValue *val) {
 static PyObject *py_get_unit_property(PyObject *self, PyObject *args) {
   const char *unit_name;
   const char *property;
-  const char *interface;
-  const char *type;
   BusObject *bus;
+
+  char *unit_name_copy = NULL;
+  char *property_copy = NULL;
 
   char errbuf[1024] = {0};
   DBusValue val = {0};
@@ -309,12 +333,24 @@ static PyObject *py_get_unit_property(PyObject *self, PyObject *args) {
     PyErr_Format(PyExc_ValueError, "Unknown property: %s", property);
     return NULL;
   }
+  unit_name_copy = strdup(unit_name);
+  property_copy = strdup(property);
+
+  // Since they're all set to NULL by default, this should be safe
+  if (!unit_name_copy || !property_copy) {
+    free(unit_name_copy);
+    free(property_copy);
+    unit_name_copy = NULL;
+    property_copy = NULL;
+    return PyErr_NoMemory();
+  }
 
   // clang-format off
 Py_BEGIN_ALLOW_THREADS
   r = get_unit_property_raw(
-    unit_name,
-    property,
+    bus,
+    unit_name_copy,
+    property_copy,
     info->interface,
     info->type,
     &val,
@@ -322,6 +358,11 @@ Py_BEGIN_ALLOW_THREADS
     sizeof(errbuf)
   );
 Py_END_ALLOW_THREADS
+
+  free(unit_name_copy);
+  free(property_copy);
+  unit_name_copy = NULL;
+  property_copy = NULL;
   if (r < 0) {
     PyErr_SetString(SystemdDBusError, errbuf);
     return NULL;
@@ -338,6 +379,12 @@ static PyObject *py_get_property(PyObject *self, PyObject *args) {
   const char *interface;
   const char *property;
   const char *type;
+
+  char *destination_copy = NULL;
+  char *path_copy = NULL;
+  char *interface_copy = NULL;
+  char *property_copy = NULL;
+  char *type_copy = NULL;
 
   BusObject *bus;
 
@@ -363,11 +410,40 @@ static PyObject *py_get_property(PyObject *self, PyObject *args) {
       PyErr_Format(PyExc_ValueError, "Unsupported D-Bus type: %s", type);
       return NULL;
   }
+  destination_copy = strdup(destination);
+  path_copy = strdup(path);
+  interface_copy = strdup(interface);
+  property_copy = strdup(property);
+  type_copy = strdup(type);
+
+  if(!destination_copy || !path_copy || !interface_copy || !property_copy || !type_copy) {
+    free(destination_copy);
+    free(path_copy);
+    free(interface_copy);
+    free(property_copy);
+    free(type_copy);
+    destination_copy = NULL;
+    path_copy = NULL;
+    interface_copy = NULL;
+    property_copy = NULL;
+    type_copy = NULL;
+    return PyErr_NoMemory();
+  }
   // clang-format off
 Py_BEGIN_ALLOW_THREADS
-  r = get_property(destination, path, interface, property, type, &val, errbuf, sizeof(errbuf));
+  r = get_property(bus->bus, destination_copy, path_copy, interface_copy, property_copy, type_copy, &val, errbuf, sizeof(errbuf));
 
 Py_END_ALLOW_THREADS
+  free(destination_copy);
+  free(path_copy);
+  free(interface_copy);
+  free(property_copy);
+  free(type_copy);
+  destination_copy = NULL;
+  path_copy = NULL;
+  interface_copy = NULL;
+  property_copy = NULL;
+  type_copy = NULL;
   if (r < 0) {
     PyErr_SetString(SystemdDBusError, errbuf);
     return NULL;
@@ -410,6 +486,7 @@ static PyObject *build_changes_list(UnitChange *changes, size_t num_changes) {
 
 static PyObject *py_enable_unit(PyObject *self, PyObject *args) {
   const char *unit;
+  char *unit_copy = NULL;
   char errbuf[1024] = {0};
   // carries_install_info reports back true if there is an [Install] section in the unit file
   int r, carries_install_info = 0;
@@ -426,12 +503,19 @@ static PyObject *py_enable_unit(PyObject *self, PyObject *args) {
     PyErr_SetString(SystemdDBusError, "Bus connection is not connected");
     return NULL;
   }
+  unit_copy = strdup(unit);
+  if (!unit_copy) {
+    return PyErr_NoMemory();
+  }
   // clang-format off
   Py_BEGIN_ALLOW_THREADS
-    r = enable_unit(unit, &carries_install_info, &changes, &num_changes,
+    r = enable_unit(bus->bus, unit_copy, &carries_install_info, &changes, &num_changes,
         errbuf, sizeof(errbuf));
   Py_END_ALLOW_THREADS
   //clang-format on
+  
+  free(unit_copy);
+  unit_copy = NULL;
   if (r < 0) {
     free_unit_changes(changes, num_changes);
     PyErr_SetString(SystemdDBusError, errbuf);
@@ -448,6 +532,7 @@ static PyObject *py_enable_unit(PyObject *self, PyObject *args) {
     return NULL;
   }
 
+
   PyObject *result = PyTuple_Pack(2, carries_obj, changes_list);
   Py_DECREF(carries_obj);
   Py_DECREF(changes_list);
@@ -456,6 +541,7 @@ static PyObject *py_enable_unit(PyObject *self, PyObject *args) {
 
 static PyObject *py_disable_unit(PyObject *self, PyObject *args) {
   const char *unit;
+  char *unit_copy = NULL;
   char errbuf[1024] = {0};
   int r;
   UnitChange *changes = NULL;
@@ -471,11 +557,17 @@ static PyObject *py_disable_unit(PyObject *self, PyObject *args) {
     PyErr_SetString(SystemdDBusError, "Bus connection is not connected");
     return NULL;
   }
+  unit_copy = strdup(unit);
+  if (!unit_copy) {
+    return PyErr_NoMemory();
+  }
   // clang-format off
   Py_BEGIN_ALLOW_THREADS
-    r = disable_unit(unit, &changes, &num_changes, errbuf, sizeof(errbuf));
+    r = disable_unit(bus->bus, unit_copy, &changes, &num_changes, errbuf, sizeof(errbuf));
   Py_END_ALLOW_THREADS
   // clang-format off
+  free(unit_copy);
+  unit_copy = NULL;
 
   if (r < 0) {
     free_unit_changes(changes, num_changes);
@@ -504,7 +596,7 @@ PyObject *py_daemon_reload(PyObject *self, PyObject *args) {
 
   // clang-format off
   Py_BEGIN_ALLOW_THREADS
-    r = daemon_reload(errbuf, sizeof(errbuf));
+    r = daemon_reload(bus->bus, errbuf, sizeof(errbuf));
   Py_END_ALLOW_THREADS
 
   if (r < 0) {
