@@ -57,11 +57,11 @@ static PyObject *Bus_new(PyTypeObject *type, PyObject *args, PyObject *kwds) {
 }
 
 static int Bus_init(BusObject *self, PyObject *args, PyObject *kwds) {
-  char errbuf[1024] = {0};
   int r;
 
   r = sd_bus_open_system(&self->bus);
   if (r < 0) {
+    char errbuf[1024] = {0};
     snprintf(errbuf, sizeof(errbuf), "Failed to connect to system bus: %s",
              strerror(-r));
     PyErr_SetString(SystemdDBusError, errbuf);
@@ -80,8 +80,6 @@ static PyObject *Bus_exit(BusObject *self, PyObject *args) {
     sd_bus_unref(self->bus);
     self->bus = NULL;
   }
-  // Returning false means that if there's an exception, the exception will be
-  // reraised after this returns
   Py_RETURN_FALSE;
 }
 
@@ -126,7 +124,7 @@ static void free_unit_changes(UnitChange *changes, size_t num) {
   free(changes);
 }
 
-PyObject *py_check_dbus_available(PyObject *self, PyObject *args) {
+static PyObject *py_check_dbus_available(PyObject *self, PyObject *args) {
   char errbuf[1024] = {0};
   int r;
 
@@ -144,7 +142,7 @@ PyObject *py_check_dbus_available(PyObject *self, PyObject *args) {
   Py_RETURN_TRUE;
 }
 
-PyObject *py_ping_dbus(PyObject *self, PyObject *args) {
+static PyObject *py_ping_dbus(PyObject *self, PyObject *args) {
   BusObject *bus;
   char errbuf[1024] = {0};
   int r;
@@ -451,7 +449,7 @@ Py_END_ALLOW_THREADS
   //clang-format on
 }
 
-static PyObject *build_changes_list(UnitChange *changes, size_t num_changes) {
+static PyObject *build_changes_list(const UnitChange *changes, size_t num_changes) {
   PyObject *list = PyList_New(num_changes);
   if (!list) return NULL;
 
@@ -579,7 +577,7 @@ static PyObject *py_disable_unit(PyObject *self, PyObject *args) {
   return changes_list;
 }
 
-PyObject *py_daemon_reload(PyObject *self, PyObject *args) {
+static PyObject *py_daemon_reload(PyObject *self, PyObject *args) {
   char errbuf[1024] = {0};
   int r;
   BusObject *bus;
@@ -685,7 +683,9 @@ static PyObject *_init_module(void) {
 }
 
 #if PY_MAJOR_VERSION >= 3
+// cppcheck-suppress unusedFunction
 PyMODINIT_FUNC PyInit__sdbus(void) { return _init_module(); }
 #else
+// cppcheck-suppress unusedFunction
 PyMODINIT_FUNC init_sdbus(void) { _init_module(); }
 #endif

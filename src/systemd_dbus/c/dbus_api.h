@@ -56,9 +56,6 @@ int ping_dbus(sd_bus *bus, char *errbuf, size_t errbuf_len);
 int call_method(sd_bus *bus, const char *method, const char *unit, char *errbuf,
                        size_t errbuf_len);
 
-int read_message_value(sd_bus_message *reply, const char *type,
-                              DBusValue *out, char *errbuf, size_t errbuf_len);
-
 int get_unit_property_raw(sd_bus *bus, const char *unit_name, const char *property,
                                  const char *interface, const char *type,
                                  DBusValue *out, char *errbuf,

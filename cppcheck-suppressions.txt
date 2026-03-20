@@ -1,0 +1,14 @@
+unusedFunction:*/python*/*
+constParameterPointer:*/python*/*
+constVariablePointer:*/python*/*
+unusedFunction:*/Python.framework/*
+constParameterPointer:*/Python.framework/*
+constVariablePointer:*/Python.framework/*
+unusedFunction:*/systemd/*
+
+unusedFunction:*systemd_dbus.c:PyInit__sdbus
+
+# This is for the python headers
+toomanyconfigs
+
+missingIncludeSystem

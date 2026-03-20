@@ -93,9 +93,9 @@ void free_unit_changes(UnitChange *changes, size_t num) {
  * @return 0 on success, negative errno value on failure
  */
 
-int read_unit_changes(sd_bus_message *reply, UnitChange **changes_out,
-                      size_t *num_changes_out, char *errbuf,
-                      size_t errbuf_len) {
+static int read_unit_changes(sd_bus_message *reply, UnitChange **changes_out,
+                             size_t *num_changes_out, char *errbuf,
+                             size_t errbuf_len) {
   UnitChange *changes = NULL;
   size_t num_changes = 0;
   int r;
@@ -237,7 +237,7 @@ int ping_dbus(sd_bus *bus, char *errbuf, size_t errbuf_len) {
                          "org.freedesktop.DBus.Peer", "Ping", &err, &reply, "");
 
   if (r < 0) {
-    if (errbuf && err.message) {
+    if (err.message) {
       snprintf(errbuf, errbuf_len, "Failed to ping dbus: %s", err.message);
     } else {
       snprintf(errbuf, errbuf_len, "Failed to ping dbus: %s", strerror(-r));
@@ -301,8 +301,8 @@ int call_method(sd_bus *bus, const char *method, const char *unit, char *errbuf,
  * @return 0 on success, negative errno on failure
  *
  */
-int read_message_value(sd_bus_message *reply, const char *type, DBusValue *out,
-                       char *errbuf, size_t errbuf_len) {
+static int read_message_value(sd_bus_message *reply, const char *type,
+                              DBusValue *out, char *errbuf, size_t errbuf_len) {
   int r;
   memset(errbuf, 0, errbuf_len);
   out->type = type[0];
