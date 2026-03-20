@@ -23,10 +23,16 @@ import syslog
 try:
     from systemd_dbus import _sdbus
     SDBUS_AVAILABLE=True
+    _DBUS_METHODS = {
+        "start_unit": _sdbus.start_unit,
+        "stop_unit": _sdbus.stop_unit,
+        "restart_unit": _sdbus.restart_unit,
+    }
 except ImportError:
     SDBUS_AVAILABLE=False
     warnings.warn("sdbus library not available, falling back to systemctl for systemd management")
-
+    _DBUS_METHODS = {}
+    _sdbus = None
 
 try:
     from resource_management.core import shell
@@ -36,11 +42,6 @@ except ImportError:
 
 
 
-_DBUS_METHODS = {
-    "start_unit": _sdbus.start_unit,
-    "stop_unit": _sdbus.stop_unit,
-    "restart_unit": _sdbus.restart_unit,
-}
 
 class SystemdError(Exception):
     pass

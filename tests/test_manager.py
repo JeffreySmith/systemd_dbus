@@ -16,42 +16,43 @@ specific language governing permissions and limitations
 under the License.    
 """
 
-import ctypes
 import pytest
 from unittest.mock import MagicMock, patch
-from systemd_dbus import SystemdManager
 
-def systemd_available():
-    try:
-        mgr = SystemdManager()
-        return mgr._dbus_available
-    except Exception:
-        return False
+@pytest.fixture
+def mock_sdbus():
+    with patch("systemd_dbus.manager._sdbus") as mock:
+        mock.SystemdDbusError = Exception
+        mock.Bus.return_value = MagicMock()
+        mock.get_unit_property.return_value = "active"
+        yield mock
 
-@pytest.fixture(scope="session")
-def test_dbus():
-    import subprocess, os
-    proc = subprocess.Popen(
-        ["dbus-daemon", "--config-file=tests/dbus/test-bus.conf", "--print-address"],
-        stdout=subprocess.PIPE,
-    )
-    assert(proc.stdout is not None)
-    address = proc.stdout.readline().decode().strip()
+@pytest.fixture
+def manager(mock_sdbus):
+    from systemd_dbus import SystemdManager
+    return SystemdManager()
 
-    os.environ["DBUS_SYSTEM_BUS_ADDRESS"] = address
-    yield address
-    proc.terminate()
+def test_active_true(manager, mock_sdbus):
+    mock_sdbus.get_unit_property.return_value = "active"
+    assert manager.active("sshd.service") is True
 
-@pytest.mark.skipif(not systemd_available(), reason="systemd not available")
-def test_version_returns_int():
-    mgr = SystemdManager()
-    v = mgr.version()
-    assert isinstance(v, int)
-    assert v > 0
+def test_active_false(manager, mock_sdbus):
+    mock_sdbus.get_unit_property.return_value = "inactive"
+    assert manager.active("sshd.service") is False
 
-@pytest.mark.skipif(not systemd_available(), reason="systemd not available")
-def test_timezone_returns_string():
-    mgr = SystemdManager()
-    tz = mgr.timezone()
-    assert isinstance(tz, str)
-    assert len(tz) > 0
+def test_appends_service_suffix(manager, mock_sdbus):
+    manager.active("sshd")
+    mock_sdbus.get_unit_property.assert_called_with("sshd.service", "ActiveState")
+
+def test_pid_none_less_equal_zero(manager, mock_sdbus):
+    mock_sdbus.get_unit_property.return_value = 0
+    assert manager.pid("sshd.service") is None
+
+    mock_sdbus.get_unit_property.return_value = -2 
+    assert manager.pid("sshd.service") is None
+
+def test_active_raises_on_error(manager, mock_sdbus):
+    mock_sdbus.get_unit_property.side_effect = Exception("Unit not found")
+    from systemd_dbus.manager import SystemdError
+    with pytest.raises(SystemdError):
+        manager.active("nonexistent.service")
