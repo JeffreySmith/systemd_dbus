@@ -72,6 +72,13 @@ class SystemdManager:
             warnings.warn("D-Bus unavailable, falling back to systemctl: {}".format(e))
             return False
 
+    def connected(self):
+        """Check to see if we're currently connected to the System Bus"""
+        if self._bus is not None:
+            return _sdbus.ping_dbus(self._bus)
+
+        return False
+
     def close(self):
         """A function to manually close the dbus connection. Will automatically be called when the class is garbage collected."""
         if self._bus is not None:
