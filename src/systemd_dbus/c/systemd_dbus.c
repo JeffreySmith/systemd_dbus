@@ -233,7 +233,7 @@ static PyObject *py_stop_unit(PyObject *self, PyObject *args) {
 
   // clang-format off
   Py_BEGIN_ALLOW_THREADS
-    r = call_method(bus, "StopUnit", unit_copy, errbuf, sizeof(errbuf));
+    r = call_method(bus->bus, "StopUnit", unit_copy, errbuf, sizeof(errbuf));
   Py_END_ALLOW_THREADS
 
   free(unit_copy);
@@ -345,7 +345,7 @@ static PyObject *py_get_unit_property(PyObject *self, PyObject *args) {
   // clang-format off
 Py_BEGIN_ALLOW_THREADS
   r = get_unit_property_raw(
-    bus,
+    bus->bus,
     unit_name_copy,
     property_copy,
     info->interface,
