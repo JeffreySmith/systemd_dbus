@@ -312,6 +312,36 @@ class SystemdManager:
             "s",
         )
 
+    def active(self, unit_name):
+        """Check if a systemd unit is active (running)"""
+        unit_name = unit_name if unit_name.endswith(".service") else "{}.service".format(unit_name)
+        if self._dbus_available:
+            try:
+                active_state = _sdbus.get_unit_property(self._bus, unit_name, "ActiveState")
+                return active_state == "active"
+            except _sdbus.SystemdDBusError as e:
+                raise SystemdError("Failed to get ActiveState for {!r}: {}".format(unit_name, e))
+        else:
+            return self._fallback_active(unit_name)
+
+    def _fallback_active(self, unit_name, timeout=10):
+        try:
+            process = subprocess.Popen(["systemctl", "is-active", unit_name], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            try:
+                process.communicate(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.communicate()
+                raise SystemdError(
+                    "systemctl is-active timed out after {} seconds for {!r}".format(
+                        timeout, unit_name
+                    )
+                )
+            return process.returncode == 0
+        except OSError as e:
+            raise SystemdError("Failed to check active state for {!r}: {}".format(unit_name, e))
+
+
     def pid(self, unit_name):
         """Get the main PID of a systemd unit. Returns None if not running."""
         unit_name = unit_name if unit_name.endswith(".service") else "{}.service".format(unit_name)

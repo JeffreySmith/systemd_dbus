@@ -146,3 +146,6 @@ __marimo__/
 .streamlit/secrets.toml
 
 src/systemd_dbus/c/docs
+compile_flags.txt
+*.pch
+*.plist
