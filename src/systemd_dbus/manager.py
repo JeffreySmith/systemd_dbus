@@ -22,6 +22,7 @@ import warnings
 import syslog
 try:
     from systemd_dbus import _sdbus
+    _SystemdDBusError = _SystemdDBusError
     SDBUS_AVAILABLE=True
     _DBUS_METHODS = {
         "start_unit": _sdbus.start_unit,
@@ -30,9 +31,10 @@ try:
     }
 except ImportError:
     SDBUS_AVAILABLE=False
-    warnings.warn("sdbus library not available, falling back to systemctl for systemd management")
+    _SystemdDBusError = Exception
     _DBUS_METHODS = {}
     _sdbus = None
+    warnings.warn("sdbus library not available, falling back to systemctl for systemd management")
 
 try:
     from resource_management.core import shell
@@ -58,7 +60,7 @@ class SystemdManager:
             if self._dbus_available:
                 try:
                     self._bus = _sdbus.Bus()
-                except _sdbus.SystemdDBusError as e:
+                except _SystemdDBusError as e:
                     warnings.warn("Failed to connect to D-Bus, falling back to systemctl: {}".format(e))
         else:
             self._dbus_available = False
@@ -69,7 +71,7 @@ class SystemdManager:
         """
         try:
             return _sdbus.check_dbus_available()
-        except _sdbus.SystemdDBusError as e:
+        except _SystemdDBusError as e:
             warnings.warn("D-Bus unavailable, falling back to systemctl: {}".format(e))
             return False
 
@@ -105,7 +107,7 @@ class SystemdManager:
                 if fn is None:
                     raise SystemdError("Unsupported D-Bus method: {}".format(fn_name))
                 fn(self._bus, unit_name)
-            except _sdbus.SystemdDBusError as e:
+            except _SystemdDBusError as e:
                 msg = str(e)
                 msg_lower = msg.lower()
                 if "denied" in msg_lower or "interactive authentication" in msg_lower:
@@ -203,8 +205,18 @@ class SystemdManager:
         try:
             return _sdbus.get_property(self._bus, destination, path, interface,
                                        property, dbus_type)
-        except _sdbus.SystemdDBusError as e:
+        except _SystemdDBusError as e:
             raise SystemdError("Failed to get {!r}: {}".format(property, e))
+
+    def get_unit_property(self, unit_name, property_name):
+        """Get a known property of a systemd unit, such as ActiveState or MainPID. The .service suffix is optional."""
+        unit_name = unit_name if unit_name.endswith(".service") else "{}.service".format(unit_name)
+        if not self._dbus_available:
+            raise SystemdError("D-Bus unavailable - get_unit_property requires D-Bus")
+        try:
+            return _sdbus.get_unit_property(self._bus, unit_name, property_name)
+        except _SystemdDBusError as e:
+            raise SystemdError("Failed to get {} for {!r}: {}".format(property_name, unit_name, e))
 
     def get_unit_property_raw(self, unit_name, interface, property_name, dbus_type):
         """Get any property of a systemd unit, specifying the interface and type
@@ -216,7 +228,7 @@ class SystemdManager:
             return _sdbus.get_unit_property_raw(
                 self._bus, unit_name, interface, property_name, dbus_type
             )
-        except _sdbus.SystemdDBusError as e:
+        except _SystemdDBusError as e:
             raise SystemdError(
                 "Failed to get {}/{} for {!r}: {}".format(
                     interface, property_name, unit_name, e
@@ -228,7 +240,7 @@ class SystemdManager:
         if self._dbus_available:
             try:
                 _sdbus.daemon_reload(self._bus)
-            except _sdbus.SystemdDBusError as e:
+            except _SystemdDBusError as e:
                 msg = str(e)
                 if "Interactive authentication" in msg:
                     warnings.warn("D-Bus permission denied for daemon_reload, attempting fallback")
@@ -291,7 +303,7 @@ class SystemdManager:
             try:
                 _, changes = _sdbus.enable_unit(self._bus, unit_name)
                 return changes
-            except _sdbus.SystemdDBusError as e:
+            except _SystemdDBusError as e:
                 raise SystemdError("enable_unit failed for {!r}: {}".format(unit_name, e))
         else:
             self._fallback_call("enable_unit", unit_name)
@@ -303,7 +315,7 @@ class SystemdManager:
         if self._dbus_available:
             try:
                 return _sdbus.disable_unit(self._bus, unit_name)
-            except _sdbus.SystemdDBusError as e:
+            except _SystemdDBusError as e:
                 raise SystemdError("disable_unit failed for {!r}: {}".format(unit_name, e))
         else:
             self._fallback_call("disable_unit", unit_name)
@@ -344,7 +356,7 @@ class SystemdManager:
             try:
                 active_state = _sdbus.get_unit_property(self._bus, unit_name, "ActiveState")
                 return active_state == "active"
-            except _sdbus.SystemdDBusError as e:
+            except _SystemdDBusError as e:
                 raise SystemdError("Failed to get ActiveState for {!r}: {}".format(unit_name, e))
         else:
             return self._fallback_active(unit_name)
@@ -390,8 +402,8 @@ class SystemdManager:
             # This should only ever return a number that can fit into an int, but because of the Python 2 api, 
             # can return as a long. If we convert it to an int that can be used by an external process.
             pid = int(_sdbus.get_unit_property(self._bus, unit_name, "MainPID"))
-            return pid if pid != 0 else None
-        except _sdbus.SystemdDBusError as e:
+            return pid if pid > 0 else None
+        except _SystemdDBusError as e:
             raise SystemdError("Failed to get MainPID for {!r}: {}".format(unit_name, e))
         except ValueError as e:
             raise SystemdError("MainPID for {!r} not a valid number: {}. This is likely a bug in the c code".format(unit_name, e))
@@ -409,7 +421,7 @@ class SystemdManager:
                     "s",
                 )
                 return val if val else None
-            except _sdbus.SystemdDBusError as e:
+            except _SystemdDBusError as e:
                 raise SystemdError("Failed to get virtualization property: {}".format(e))
 
         else:
