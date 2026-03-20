@@ -35,7 +35,7 @@ testpaths = ["tests"]
 filterwarnings = ["ignore::UserWarning:systemd_dbus"]
 # Run pytest -m 'integration' to run the integration tests.
 # Only do this when testing on a system with dbus and Systemd
-#addopts = "-m not-integration"
+addopts = "-m not-integration"
 markers = [
   "integration: requires D-Bus and systemd (deselect with '-m not integration')",
 ]

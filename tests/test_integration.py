@@ -18,11 +18,16 @@ under the License.
 
 
 import pytest
+import sys
+
+if sys.platform != "linux":
+    pytest.skip("Integration tests require Linux with Systemd", allow_module_level=True)
 
 pytestmark = pytest.mark.integration
 
 @pytest.fixture
 def manager():
+    from systemd_dbus import _sdbus
     from systemd_dbus import SystemdManager
     m = SystemdManager()
     if not m._dbus_available:
@@ -52,7 +57,7 @@ def test_get_unit_property_active_state(manager):
 
 def test_get_unit_property_nonexistent(manager):
     from systemd_dbus.manager import SystemdError
-    with pytest.raises(SystemdError):
+    with pytest.raises(ValueError):
         manager.get_unit_property("systemd-journald.service", "does_not_exist")
 
 def test_get_property_types(manager):

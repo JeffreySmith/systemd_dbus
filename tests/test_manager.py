@@ -17,13 +17,17 @@ under the License.
 """
 
 import pytest
+import sys
 from unittest.mock import MagicMock, patch
+
+
+if sys.platform != "linux":
+    pytest.skip("systemd-dbus only supported on Linux", allow_module_level=True)
 
 @pytest.fixture
 def mock_sdbus():
     with patch("systemd_dbus.manager._sdbus") as mock, \
-        patch("systemd_dbus.manager.SDBUS_AVAILABLE", True), \
-        patch("systemd_dbus.manager._SystemdDBusError", Exception):
+        patch("systemd_dbus.manager._sdbus.SystemdDBusError", Exception):
 
         class MockSystemdDbusError(Exception):
             pass
