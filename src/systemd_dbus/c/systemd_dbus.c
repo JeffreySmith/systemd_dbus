@@ -20,6 +20,7 @@ under the License.
 #include <assert.h>
 #include <errno.h>
 #include <inttypes.h>
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -287,21 +288,48 @@ static PyObject *py_restart_unit(PyObject *self, PyObject *args) {
 
 static PyObject *dbus_val_to_python(const DBusValue *val) {
   switch (val->type) {
+  // String types
   case 's':
+  case 'o':
+  case 'g':
     return PyUnicode_FromString(val->s_buf);
+  // Unsigned integers
+
+  // byte
+  case 'y':
+    return PyLong_FromUnsignedLong(val->val.y);
+  // uint16
+  case 'q':
+    return PyLong_FromUnsignedLong(val->val.q);
+  // uint32
   case 'u':
     return PyLong_FromUnsignedLong(val->val.u);
-  case 'i':
-    return PyLong_FromLong(val->val.i);
+  // uint64_t
   case 't':
     return PyLong_FromUnsignedLongLong(val->val.t);
+  // Signed integers
+
+  // int16_t
+  case 'n':
+    return PyLong_FromLong(val->val.n);
+  // int32
+  case 'i':
+    return PyLong_FromLong(val->val.i);
+  // int64_t
   case 'x':
     return PyLong_FromLongLong(val->val.x);
+  // Boolean
   case 'b':
     return PyBool_FromLong(val->val.b);
+  // double
+  case 'd':
+    return PyFloat_FromDouble(val->val.d);
+  // Unix FD
+  case 'h':
+    return PyLong_FromLong(val->val.h);
   default:
     PyErr_Format(SystemdDBusError, "Unsupported DBus type: %c", val->type);
-    Py_RETURN_NONE;
+    return NULL;
   }
 }
 
@@ -369,6 +397,20 @@ Py_END_ALLOW_THREADS
   //clang-format on
 }
 
+static bool valid_property_type(char type) {
+  if (!type) {
+    return false;
+  }
+  switch (type) {
+    case 'y': case 'b': case 'n': case 'q':
+    case 'i': case 'u': case 'x': case 't':
+    case 'd': case 's': case 'o': case 'g':
+    case 'h':
+      return true;
+    default:
+      return false;
+  }
+}
 
 static PyObject *py_get_property(PyObject *self, PyObject *args) {
   const char *destination;
@@ -400,10 +442,7 @@ static PyObject *py_get_property(PyObject *self, PyObject *args) {
     return NULL;
   }
 
-  switch (type[0]) {
-    case 's': case 'u': case 'i': case 't': case 'x': case 'b':
-      break;
-    default:
+  if (!valid_property_type(type[0])) {
       PyErr_Format(PyExc_ValueError, "Unsupported D-Bus type: %s", type);
       return NULL;
   }
@@ -447,6 +486,90 @@ Py_END_ALLOW_THREADS
   }
   return dbus_val_to_python(&val);
   //clang-format on
+}
+
+static PyObject *py_get_unit_property_raw(PyObject *self, PyObject *args) {
+  BusObject *bus;
+  const char *unit_name;
+  const char *interface;
+  const char *property;
+  const char *type;
+  char *unit_name_copy = NULL;
+  char *interface_copy = NULL;
+  char *property_copy = NULL;
+  char *type_copy = NULL;
+
+  char errbuf[1024] = {0};
+  DBusValue val = {0};
+  int r;
+
+  if (!PyArg_ParseTuple(
+    args,
+    "O!ssss",
+    &BusType,
+    &bus,
+    &unit_name,
+    &interface,
+    &property,
+    &type)) {
+      return NULL;
+  }
+
+  if (!bus->bus) {
+    PyErr_SetString(SystemdDBusError, "Bus connection is not connected");
+    return NULL;
+  }
+
+  if (!valid_property_type(type[0])) {
+      PyErr_Format(PyExc_ValueError, "Unsupported D-Bus type: %s", type);
+      return NULL;
+  }
+  unit_name_copy = strdup(unit_name);
+  interface_copy = strdup(interface);
+  property_copy = strdup(property);
+  type_copy = strdup(type);
+
+
+  if (!unit_name_copy || !interface_copy || !property_copy || !type_copy) {
+    free(unit_name_copy);
+    free(interface_copy);
+    free(property_copy);
+    free(type_copy);
+    unit_name_copy = NULL;
+    interface_copy = NULL;
+    property_copy = NULL;
+    type_copy = NULL;
+    return PyErr_NoMemory();
+  }
+
+    Py_BEGIN_ALLOW_THREADS
+        r = get_unit_property_raw(
+            bus->bus,
+            unit_name_copy,
+            property_copy,
+            interface,
+            type,
+            &val,
+            errbuf,
+            sizeof(errbuf)
+        );
+    Py_END_ALLOW_THREADS
+    
+  free(unit_name_copy);
+  free(interface_copy);
+  free(property_copy);
+  free(type_copy);
+  unit_name_copy = NULL;
+  interface_copy = NULL;
+  property_copy = NULL;
+  type_copy = NULL;
+
+  if (r < 0) {
+    PyErr_SetString(SystemdDBusError, errbuf);
+    return NULL;
+  }
+
+  return dbus_val_to_python(&val);
 }
 
 static PyObject *build_changes_list(const UnitChange *changes, size_t num_changes) {
@@ -625,8 +748,16 @@ static struct PyMethodDef sdbus_methods[] = {
      "restarting the service.\n"},
     {"get_unit_property", py_get_unit_property, METH_VARARGS,
      "get_unit_property(bus, unit_name, property) -> str | int | bool\n\n Get "
-     "a "
+     "a known"
      "property of a Systemd service on the system bus.\n\n"},
+    {"get_unit_property_raw", py_get_unit_property_raw, METH_VARARGS,
+     "get_unit_property_raw(bus, unit_name, interface, property, type) -> str "
+     "| int | bool\n"
+     "\n"
+     "Get any property of a systemd unit by specifying the interface and "
+     "D-Bus\n"
+     "type explicitly. Use get_unit_property for known properties instead.\n"
+     "\n"},
     {"enable_unit", py_enable_unit, METH_VARARGS,
      "enable_unit(bus, unit_name) -> None\n\nEnable a Systemd unit file on the "
      "system bus.\n\n :param unit_name: The name of the service to "

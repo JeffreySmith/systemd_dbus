@@ -205,6 +205,23 @@ class SystemdManager:
         except _sdbus.SystemdDBusError as e:
             raise SystemdError("Failed to get {!r}: {}".format(property, e))
 
+    def get_unit_property_raw(self, unit_name, interface, property_name, dbus_type):
+        """Get any property of a systemd unit, specifying the interface and type
+        explicitly. Use get_unit_property for known properties instead."""
+        unit_name = unit_name if unit_name.endswith(".service") else "{}.service".format(unit_name)
+        if not self._dbus_available:
+            raise SystemdError("D-Bus unavailable - get_unit_property_raw requires D-Bus")
+        try:
+            return _sdbus.get_unit_property_raw(
+                self._bus, unit_name, interface, property_name, dbus_type
+            )
+        except _sdbus.SystemdDBusError as e:
+            raise SystemdError(
+                "Failed to get {}/{} for {!r}: {}".format(
+                    interface, property_name, unit_name, e
+                )
+            )
+
     def daemon_reload(self):
         """Reload the systemd daemon to pick up any changes to unit files."""
         if self._dbus_available:

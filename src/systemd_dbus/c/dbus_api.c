@@ -581,7 +581,7 @@ cleanup:
  * @param[out] changes_out Output parameter that will point to an allocated
  * array of UnitChange structs describing the changes made by disabling the unit
  * (e.g. symlinks removed)
- * @params[out] num_changes_out Output parameter that will be set to the number
+ * @param[out] num_changes_out Output parameter that will be set to the number
  * of changes in the changes_out array
  * @param[out] errbuf Buffer to write error message to if an error occurs
  * @param[in] errbuf_len

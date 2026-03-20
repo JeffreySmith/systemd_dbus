@@ -31,14 +31,18 @@ typedef struct {
 typedef struct {
   char type;
   union {
-    const char *s;
-    uint32_t u;
-    int32_t i;
-    uint64_t t;
-    int64_t x;
-    int b;
+    uint8_t  y;   // BYTE
+    int16_t  n;   // INT16
+    uint16_t q;   // UINT16
+    int32_t  i;   // INT32
+    uint32_t u;   // UINT32
+    int64_t  x;   // INT64
+    uint64_t t;   // UINT64
+    double   d;   // DOUBLE
+    int      b;   // BOOLEAN
+    int      h;   // UNIX_FD
   } val;
-  char s_buf[1024];
+  char s_buf[1024]; // STRING ('s'), OBJECT PATH ('o'), SIGNATURE ('g')
 } DBusValue;
 
 typedef struct {
