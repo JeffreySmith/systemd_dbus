@@ -3,12 +3,12 @@ Maintainer: Jeffrey Smith <jeffrey.smith7@gmail.com>
 Section: python
 Priority: optional
 Build-Depends:
-        dh-python,
-        @PYTHON@,
-        @PYTHON@-dev,
-        debhelper (>= 13),
-        gcc,
-        libsystemd-dev
+	dh-python,
+	@PYTHON@,
+	@PYTHON@-dev,
+	debhelper (>= 13),
+	gcc,
+	libsystemd-dev
 Standards-Version: 4.6.0
 Homepage: https://github.com/JeffreySmith/systemd_dbus
 Rules-Requires-Root: no
@@ -16,10 +16,10 @@ Rules-Requires-Root: no
 Package: @PYTHON@-systemd-dbus
 Architecture: any
 Depends:
-        ${misc:Depends},
-        ${shlibs:Depends},
-        @PYTHON@,
-        libsystemd0
+	${misc:Depends},
+	${shlibs:Depends},
+	@PYTHON@,
+	libsystemd0
 Description: Python bindings for systemd D-Bus management
  A Python library providing thin bindings for managing systemd units
  and querying D-Bus properties via libsystemd.
