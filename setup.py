@@ -10,7 +10,7 @@ native = Extension(
 
 setup(
     name="systemd-dbus",
-    version="0.2",
+    version="0.3",
     description="Thin Python bindings for a minimal set of systemd service management commands, using sd-bus",
     author="Jeffrey Smith",
     author_email="jeffrey.smith@acceldata.io",
