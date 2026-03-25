@@ -3,7 +3,6 @@ Maintainer: Jeffrey Smith <jeffrey.smith7@gmail.com>
 Section: python
 Priority: optional
 Build-Depends:
-	dh-python,
 	@PYTHON@,
 	@PYTHON@-dev,
 	debhelper (>= 13),
