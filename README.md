@@ -63,13 +63,22 @@ Not all functionality is available through the fallback methods, so some
 functions may not work if DBus is not available, but the most common ones
 should work.
 
-## Missing Functionality
+## Building a Debian package
 
-Expected features to be added:
+To build the Debian package, make sure that you have all the needed Debian
+package tools installed, and then run
 
-1. ~~Enabling/Disabling services~~
-2. ~~Get the status of a service~~
-3. ~~Reload the Systemd Daemon~~
+```bash
+chmod +x build_deb.sh
+./build_deb.sh
+```
+
+By default, this will build a package for Python 3.11, but you can override
+this by overriding the Python version:
+
+```bash
+PYTHON_VERSION=3.9 ./build_deb.sh
+```
 
 ## Static Checking the C Code
 

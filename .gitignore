@@ -154,3 +154,13 @@ debian/control
 debian/tmp/
 debian/python3*-systemd-dbus.install
 debian/python3*-systemd-dbus-dev.install
+
+.pybuild/
+debian/.debhelper/
+debian/debhelper-build-stamp
+debian/files
+debian/python3.*-systemd-dbus.debhelper.log
+debian/python3.*-systemd-dbus.postinst.debhelper
+debian/python3.*-systemd-dbus.prerm.debhelper
+debian/python3.*-systemd-dbus.substvars
+debian/python3.*-systemd-dbus/
