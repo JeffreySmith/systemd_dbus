@@ -151,7 +151,6 @@ compile_flags.txt
 *.plist
 
 debian/control
-debian/compat
 debian/tmp/
 debian/python3*-systemd-dbus.install
 debian/python3*-systemd-dbus-dev.install
