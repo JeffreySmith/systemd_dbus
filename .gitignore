@@ -149,3 +149,9 @@ src/systemd_dbus/c/docs
 compile_flags.txt
 *.pch
 *.plist
+
+debian/control
+debian/compat
+debian/tmp/
+debian/python3*-systemd-dbus.install
+debian/python3*-systemd-dbus-dev.install
