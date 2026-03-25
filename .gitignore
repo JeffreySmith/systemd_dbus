@@ -164,3 +164,6 @@ debian/python3.*-systemd-dbus.postinst.debhelper
 debian/python3.*-systemd-dbus.prerm.debhelper
 debian/python3.*-systemd-dbus.substvars
 debian/python3.*-systemd-dbus/
+dist/
+*.deb
+*.rpm
