@@ -32,8 +32,9 @@ MANIFEST
 *.manifest
 *.spec
 
+
 # Make sure to include the spec file in the repo
-!systemd_dbus.spec
+!systemd-dbus.spec
 
 # Installer logs
 pip-log.txt

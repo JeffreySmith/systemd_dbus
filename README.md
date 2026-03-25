@@ -80,6 +80,20 @@ this by overriding the Python version:
 PYTHON_VERSION=3.9 ./build_deb.sh
 ```
 
+## Building an RPM package
+
+To build an RPM package, make sure you have `rpmdevtools` installed, then run
+
+```bash
+./build_rpm.sh
+```
+
+You can change the version of Python used by doing the following:
+
+```bash
+PYTHON_VERSION=3.9 ./build_rpm.sh
+```
+
 ## Static Checking the C Code
 
 Much of this library is written in C. If you install
