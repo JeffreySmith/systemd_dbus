@@ -9,8 +9,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "systemd-dbus"
-version = "0.2"
-description = "Thin Python bindings for a minimal set of systemd service management commands, using sd-bus"
+version = "0.3"
+description = """Thin Python bindings for a minimal set of systemd service management commands, using sd-bus. Also includes functionality for creating unit files, as well as polkit rules.
+"""
 requires-python = ">=2.7"
 license = { file = "LICENSE" }
 authors = [{ name = "Jeffrey Smith", email = "jeffrey.smith@acceldata.io" }]
@@ -19,7 +20,22 @@ readme = "README.md"
 classifiers = ["Operating System :: POSIX :: Linux"]
 
 [project.optional-dependencies]
-dev = ["pytest"]
+dev = [
+  "pytest >= 9.0, < 10; python_version >= '3.9'",
+  "pytest >= 6.0, < 7; python_version >= '3.6' and python_version < '3.9'",
+  "pytest==4.6.11; python_version == '2.7'",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+filterwarnings = ["ignore::UserWarning:systemd_dbus"]
+# This is the default, in case someone is somewhere where DBus is not available.
+# To run all of the tests, run `pytest -m ""`
+addopts = "-m not-integration"
+markers = [
+  "integration: requires D-Bus and systemd (deselect with '-m not integration')",
+]

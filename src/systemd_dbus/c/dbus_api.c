@@ -93,9 +93,9 @@ void free_unit_changes(UnitChange *changes, size_t num) {
  * @return 0 on success, negative errno value on failure
  */
 
-int read_unit_changes(sd_bus_message *reply, UnitChange **changes_out,
-                      size_t *num_changes_out, char *errbuf,
-                      size_t errbuf_len) {
+static int read_unit_changes(sd_bus_message *reply, UnitChange **changes_out,
+                             size_t *num_changes_out, char *errbuf,
+                             size_t errbuf_len) {
   UnitChange *changes = NULL;
   size_t num_changes = 0;
   int r;
@@ -171,8 +171,8 @@ int read_unit_changes(sd_bus_message *reply, UnitChange **changes_out,
 
 /**
  * @brief Checks if dbus is accessible and systemd1 is available on the bus by
- * pinging it
- *
+ * pinging it. This can be used before initiating a persistent connection to
+ * dbus
  * @param[out] errbuf Buffer to write error message to if dbus is not available
  * or systemd1 is not on the bus
  * @param[in] errbuf_len Length of the error buffer
@@ -211,9 +211,48 @@ cleanup:
   return r < 0 ? r : 0;
 }
 /**
+ * @brief Checks if dbus is accessible and systemd1 is available on the bus by
+ * pinging it. This should be used after a persistent connection has been
+ * established.
+ * @param[in] bus The dbus connection to use
+ * @param[out] errbuf Buffer to write error message to if dbus is not available
+ * or systemd1 is not on the bus
+ * @param[in] errbuf_len Length of the error buffer
+ * @return 0 if dbus is available and systemd1 is on the bus, negative errno
+ * otherwise
+ */
+
+int ping_dbus(sd_bus *bus, char *errbuf, size_t errbuf_len) {
+  sd_bus_error err = SD_BUS_ERROR_NULL;
+  sd_bus_message *reply = NULL;
+  int r;
+  memset(errbuf, 0, errbuf_len);
+  if (bus == NULL) {
+    snprintf(errbuf, errbuf_len, "Bus connection is not initialized");
+    return -ENOTCONN;
+  }
+
+  r = sd_bus_call_method(bus, "org.freedesktop.systemd1",
+                         "/org/freedesktop/systemd1",
+                         "org.freedesktop.DBus.Peer", "Ping", &err, &reply, "");
+
+  if (r < 0) {
+    if (err.message) {
+      snprintf(errbuf, errbuf_len, "Failed to ping dbus: %s", err.message);
+    } else {
+      snprintf(errbuf, errbuf_len, "Failed to ping dbus: %s", strerror(-r));
+    }
+  }
+
+  sd_bus_error_free(&err);
+  sd_bus_message_unref(reply);
+  return r < 0 ? r : 0;
+}
+
+/**
  * @brief Calls a method (StartUnit, StopUnit, RestartUnit) on the systemd1
  * Manager interface for a particular unit
- *
+ * @param[in] bus The dbus connection to use
  * @param[in] method The method to call (e.g. "StartUnit")
  * @param[in] unit The unit to call the method on (e.g. "nginx.service")
  * @param[out] errbuf Buffer to write error message to if an error occurs
@@ -221,22 +260,17 @@ cleanup:
  * @return 0 on success, negative errno on failure
  *
  */
-int call_method(const char *method, const char *unit, char *errbuf,
+int call_method(sd_bus *bus, const char *method, const char *unit, char *errbuf,
                 size_t errbuf_len) {
-  sd_bus *bus = NULL;
   sd_bus_error err = SD_BUS_ERROR_NULL;
   sd_bus_message *reply = NULL;
 
   // Return code for any issues
   int r;
   memset(errbuf, 0, errbuf_len);
-
-  r = sd_bus_open_system(&bus);
-  if (r < 0) {
-    snprintf(errbuf, errbuf_len, "Failed to connect to system bus: %s",
-             strerror(-r));
-
-    goto cleanup;
+  if (bus == NULL) {
+    snprintf(errbuf, errbuf_len, "Bus connection is not initialized");
+    return -ENOTCONN;
   }
 
   r = sd_bus_call_method(bus, "org.freedesktop.systemd1",
@@ -249,10 +283,8 @@ int call_method(const char *method, const char *unit, char *errbuf,
              err.message ? err.message : strerror(-r));
   }
 
-cleanup:
   sd_bus_error_free(&err);
   sd_bus_message_unref(reply);
-  sd_bus_unref(bus);
   return r < 0 ? r : 0;
 }
 
@@ -269,8 +301,8 @@ cleanup:
  * @return 0 on success, negative errno on failure
  *
  */
-int read_message_value(sd_bus_message *reply, const char *type, DBusValue *out,
-                       char *errbuf, size_t errbuf_len) {
+static int read_message_value(sd_bus_message *reply, const char *type,
+                              DBusValue *out, char *errbuf, size_t errbuf_len) {
   int r;
   memset(errbuf, 0, errbuf_len);
   out->type = type[0];
@@ -311,6 +343,7 @@ int read_message_value(sd_bus_message *reply, const char *type, DBusValue *out,
 /**
  * @brief Get a property of a systemd unit file
  *
+ * @param[in] bus The dbus connection to use
  * @param[in] unit_name The name of the unit (e.g. "nginx.service")
  * @param[in] property The name of the property to get (e.g. "MainPID")
  * @param[in] interface The D-Bus interface the property belongs to
@@ -322,24 +355,20 @@ int read_message_value(sd_bus_message *reply, const char *type, DBusValue *out,
  * @return 0 on success, negative errno on failure
  */
 
-int get_unit_property_raw(const char *unit_name, const char *property,
-                          const char *interface, const char *type,
-                          DBusValue *out, char *errbuf, size_t errbuf_len) {
+int get_unit_property_raw(sd_bus *bus, const char *unit_name,
+                          const char *property, const char *interface,
+                          const char *type, DBusValue *out, char *errbuf,
+                          size_t errbuf_len) {
 
-  sd_bus *bus = NULL;
   sd_bus_error err = SD_BUS_ERROR_NULL;
   sd_bus_message *reply = NULL;
   char *unit_path = NULL;
   int r;
 
   memset(errbuf, 0, errbuf_len);
-
-  r = sd_bus_open_system(&bus);
-
-  if (r < 0) {
-    snprintf(errbuf, errbuf_len, "Failed to connect to system bus: %s",
-             strerror(-r));
-    goto cleanup;
+  if (bus == NULL) {
+    snprintf(errbuf, errbuf_len, "Bus connection is not initialized");
+    return -ENOTCONN;
   }
 
   r = sd_bus_call_method(bus, "org.freedesktop.systemd1",
@@ -392,7 +421,6 @@ int get_unit_property_raw(const char *unit_name, const char *property,
 cleanup:
   sd_bus_error_free(&err);
   sd_bus_message_unref(reply);
-  sd_bus_unref(bus);
   free(unit_path);
   return r < 0 ? r : 0;
 }
@@ -400,6 +428,7 @@ cleanup:
 /**
  * @brief Get a property of a D-Bus object at an arbitrary destination and path
  *
+ * @param[in] bus The dbus connection to use
  * @param[in] destination The D-Bus destination (e.g.
  * "org.freedesktop.systemd1")
  * @param[in] path The D-Bus object path (e.g. "/org/freedesktop/timedate1")
@@ -414,21 +443,17 @@ cleanup:
  * @return 0 on success, negative errno on failure
  */
 
-int get_property(const char *destination, const char *path,
+int get_property(sd_bus *bus, const char *destination, const char *path,
                  const char *interface, const char *property, const char *type,
                  DBusValue *out, char *errbuf, size_t errbuf_len) {
-  sd_bus *bus = NULL;
   sd_bus_error err = SD_BUS_ERROR_NULL;
   sd_bus_message *reply = NULL;
   int r;
 
   memset(errbuf, 0, errbuf_len);
-
-  r = sd_bus_open_system(&bus);
-  if (r < 0) {
-    snprintf(errbuf, errbuf_len, "Failed to connect to system bus: %s",
-             strerror(-r));
-    goto cleanup;
+  if (bus == NULL) {
+    snprintf(errbuf, errbuf_len, "Bus connection is not initialized");
+    return -ENOTCONN;
   }
 
   r = sd_bus_get_property(bus, destination, path, interface, property, &err,
@@ -444,7 +469,6 @@ int get_property(const char *destination, const char *path,
 cleanup:
   sd_bus_error_free(&err);
   sd_bus_message_unref(reply);
-  sd_bus_unref(bus);
   return r < 0 ? r : 0;
 }
 
@@ -453,6 +477,7 @@ cleanup:
  * @brief Enables a systemd unit file by calling the EnableUnitFiles method on
  * the system bus
  *
+ * @param[in] bus The dbus connection to use
  * @param[in] unit_name The name of the unit file to enable (e.g.
  * "nginx.service")
  * @param[out] carries_install_info Output parameter that will be set if the
@@ -467,10 +492,9 @@ cleanup:
  *
  * @return 0 on success, negative error code on failure
  */
-int enable_unit(const char *unit_name, int *carries_install_info,
+int enable_unit(sd_bus *bus, const char *unit_name, int *carries_install_info,
                 UnitChange **changes_out, size_t *num_changes_out, char *errbuf,
                 size_t errbuf_len) {
-  sd_bus *bus = NULL;
   sd_bus_error err = SD_BUS_ERROR_NULL;
   sd_bus_message *msg = NULL;
   sd_bus_message *reply = NULL;
@@ -480,12 +504,9 @@ int enable_unit(const char *unit_name, int *carries_install_info,
   *carries_install_info = 0;
   *changes_out = NULL;
   *num_changes_out = 0;
-
-  r = sd_bus_open_system(&bus);
-  if (r < 0) {
-    snprintf(errbuf, errbuf_len, "Failed to connect to system bus: %s",
-             strerror(-r));
-    goto cleanup;
+  if (bus == NULL) {
+    snprintf(errbuf, errbuf_len, "Bus connection is not initialized");
+    return -ENOTCONN;
   }
 
   r = sd_bus_message_new_method_call(
@@ -548,42 +569,39 @@ cleanup:
   sd_bus_error_free(&err);
   sd_bus_message_unref(msg);
   sd_bus_message_unref(reply);
-  sd_bus_unref(bus);
   return r < 0 ? r : 0;
 }
 /**
  * @brief Disables a systemd unit file by calling the DisableUnitFiles method on
  * the system bus
  *
+ * @param[in] bus The dbus connection to use
  * @param[in] unit_name The name of the unit file to disable (e.g.
  * "nginx.service")
  * @param[out] changes_out Output parameter that will point to an allocated
  * array of UnitChange structs describing the changes made by disabling the unit
  * (e.g. symlinks removed)
- * @params[out] num_changes_out Output parameter that will be set to the number
+ * @param[out] num_changes_out Output parameter that will be set to the number
  * of changes in the changes_out array
  * @param[out] errbuf Buffer to write error message to if an error occurs
  * @param[in] errbuf_len
  * @return 0 on success, negative error code on failure
  */
-int disable_unit(const char *unit_name, UnitChange **changes_out,
+int disable_unit(sd_bus *bus, const char *unit_name, UnitChange **changes_out,
                  size_t *num_changes_out, char *errbuf, size_t errbuf_len) {
-  sd_bus *bus = NULL;
   sd_bus_error err = SD_BUS_ERROR_NULL;
   sd_bus_message *msg = NULL;
   sd_bus_message *reply = NULL;
   int r;
 
   memset(errbuf, 0, errbuf_len);
+  if (bus == NULL) {
+    snprintf(errbuf, errbuf_len, "Bus connection is not initialized");
+    return -ENOTCONN;
+  }
+
   *changes_out = NULL;
   *num_changes_out = 0;
-
-  r = sd_bus_open_system(&bus);
-  if (r < 0) {
-    snprintf(errbuf, errbuf_len, "Failed to connect to system bus: %s",
-             strerror(-r));
-    goto cleanup;
-  }
 
   r = sd_bus_message_new_method_call(
       bus, &msg, "org.freedesktop.systemd1", "/org/freedesktop/systemd1",
@@ -636,7 +654,6 @@ cleanup:
   sd_bus_error_free(&err);
   sd_bus_message_unref(msg);
   sd_bus_message_unref(reply);
-  sd_bus_unref(bus);
   return r < 0 ? r : 0;
 }
 
@@ -644,23 +661,21 @@ cleanup:
  * @brief Reloads the systemd manager configuration by calling the Reload method
  * on the system bus
  *
+ * @param[in] bus The dbus connection to use
  * @param[out] errbuf Buffer to write error message to if an error occurs
  * @param[in] errbuf_len Length of the error buffer
  *
  * @return 0 on success, negative error code on failure
  */
-int daemon_reload(char *errbuf, size_t errbuf_len) {
-  sd_bus *bus = NULL;
+int daemon_reload(sd_bus *bus, char *errbuf, size_t errbuf_len) {
   sd_bus_error err = SD_BUS_ERROR_NULL;
   sd_bus_message *reply = NULL;
 
+  int r;
   memset(errbuf, 0, errbuf_len);
-
-  int r = sd_bus_open_system(&bus);
-  if (r < 0) {
-    snprintf(errbuf, errbuf_len, "Failed to connect to system bus: %s",
-             strerror(-r));
-    goto cleanup;
+  if (bus == NULL) {
+    snprintf(errbuf, errbuf_len, "Bus connection is not initialized");
+    return -ENOTCONN;
   }
 
   r = sd_bus_call_method(
@@ -674,9 +689,7 @@ int daemon_reload(char *errbuf, size_t errbuf_len) {
       snprintf(errbuf, errbuf_len, "Daemon reload failed: %s", strerror(-r));
     }
   }
-cleanup:
   sd_bus_error_free(&err);
   sd_bus_message_unref(reply);
-  sd_bus_unref(bus);
   return r < 0 ? r : 0;
 }

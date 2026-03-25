@@ -19,20 +19,13 @@ under the License.
 import re
 import subprocess
 import warnings
-try:
-    from systemd_dbus import _sdbus
-    SDBUS_AVAILABLE=True
-except ImportError:
-    SDBUS_AVAILABLE=False
-    warnings.warn("sdbus library not available, falling back to systemctl for systemd management")
-
-
+import syslog
+from systemd_dbus import _sdbus
 try:
     from resource_management.core import shell
     AMBARI_AVAILABLE = True
 except ImportError:
     AMBARI_AVAILABLE = False
-
 
 
 _DBUS_METHODS = {
@@ -41,6 +34,7 @@ _DBUS_METHODS = {
     "restart_unit": _sdbus.restart_unit,
 }
 
+
 class SystemdError(Exception):
     pass
 
@@ -48,12 +42,15 @@ class SystemdManager:
     _dbus_available = False
 
     def __init__(self):
-        if SDBUS_AVAILABLE:
-            self._dbus_available = SystemdManager._check_dbus()
-            self.container_type = self.container()
-            self._dbus_available = self.container_type is None
-        else:
-            self._dbus_available = False
+        self._bus = None
+        self._dbus_available = SystemdManager._check_dbus()
+        self.container_type = self.container()
+        self._dbus_available = self.container_type is None
+        if self._dbus_available:
+            try:
+                self._bus = _sdbus.Bus()
+            except _sdbus.SystemdDBusError as e:
+                warnings.warn("Failed to connect to D-Bus, falling back to systemctl: {}".format(e))
 
     @classmethod
     def _check_dbus(cls):
@@ -61,19 +58,42 @@ class SystemdManager:
         """
         try:
             return _sdbus.check_dbus_available()
-        except _sdbus.SystemdDBusError as e:
+        except (RuntimeError, _sdbus.SystemdDBusError) as e:
             warnings.warn("D-Bus unavailable, falling back to systemctl: {}".format(e))
             return False
+
+    def connected(self):
+        """Check to see if we're currently connected to the System Bus"""
+        if self._bus is not None:
+            return _sdbus.ping_dbus(self._bus)
+
+        return False
+
+    def close(self):
+        """A function to manually close the dbus connection. Will automatically be called when the class is garbage collected."""
+        if self._bus is not None:
+            try:
+                self._bus.__exit__(None, None, None)
+            except Exception:
+                pass
+            finally:
+                self._bus = None
+
+    def __del__(self):
+        try:
+            self.close()
+        except Exception:
+            pass
 
     def _call(self, fn_name, unit_name):
         """Generic caller for start, stop, and restart."""
         unit_name = unit_name if unit_name.endswith(".service") else "{}.service".format(unit_name)
-        if self._dbus_available:
+        if self._dbus_available and self._bus is not None:
             try:
                 fn = _DBUS_METHODS.get(fn_name)
                 if fn is None:
                     raise SystemdError("Unsupported D-Bus method: {}".format(fn_name))
-                fn(unit_name)
+                fn(self._bus, unit_name)
             except _sdbus.SystemdDBusError as e:
                 msg = str(e)
                 msg_lower = msg.lower()
@@ -170,16 +190,43 @@ class SystemdManager:
                       property, dbus_type):
         """Get a property value from DBus."""
         try:
-            return _sdbus.get_property(destination, path, interface,
+            return _sdbus.get_property(self._bus, destination, path, interface,
                                        property, dbus_type)
         except _sdbus.SystemdDBusError as e:
             raise SystemdError("Failed to get {!r}: {}".format(property, e))
+
+    def get_unit_property(self, unit_name, property_name):
+        """Get a known property of a systemd unit, such as ActiveState or MainPID. The .service suffix is optional."""
+        unit_name = unit_name if unit_name.endswith(".service") else "{}.service".format(unit_name)
+        if not self._dbus_available:
+            raise SystemdError("D-Bus unavailable - get_unit_property requires D-Bus")
+        try:
+            return _sdbus.get_unit_property(self._bus, unit_name, property_name)
+        except _sdbus.SystemdDBusError as e:
+            raise SystemdError("Failed to get {} for {!r}: {}".format(property_name, unit_name, e))
+
+    def get_unit_property_raw(self, unit_name, interface, property_name, dbus_type):
+        """Get any property of a systemd unit, specifying the interface and type
+        explicitly. Use get_unit_property for known properties instead."""
+        unit_name = unit_name if unit_name.endswith(".service") else "{}.service".format(unit_name)
+        if not self._dbus_available:
+            raise SystemdError("D-Bus unavailable - get_unit_property_raw requires D-Bus")
+        try:
+            return _sdbus.get_unit_property_raw(
+                self._bus, unit_name, interface, property_name, dbus_type
+            )
+        except _sdbus.SystemdDBusError as e:
+            raise SystemdError(
+                "Failed to get {}/{} for {!r}: {}".format(
+                    interface, property_name, unit_name, e
+                )
+            )
 
     def daemon_reload(self):
         """Reload the systemd daemon to pick up any changes to unit files."""
         if self._dbus_available:
             try:
-                _sdbus.daemon_reload()
+                _sdbus.daemon_reload(self._bus)
             except _sdbus.SystemdDBusError as e:
                 msg = str(e)
                 if "Interactive authentication" in msg:
@@ -241,7 +288,7 @@ class SystemdManager:
         unit_name = unit_name if unit_name.endswith(".service") else "{}.service".format(unit_name)
         if self._dbus_available:
             try:
-                _, changes = _sdbus.enable_unit(unit_name)
+                _, changes = _sdbus.enable_unit(self._bus, unit_name)
                 return changes
             except _sdbus.SystemdDBusError as e:
                 raise SystemdError("enable_unit failed for {!r}: {}".format(unit_name, e))
@@ -254,7 +301,7 @@ class SystemdManager:
         unit_name = unit_name if unit_name.endswith(".service") else "{}.service".format(unit_name)
         if self._dbus_available:
             try:
-                return _sdbus.disable_unit(unit_name)
+                return _sdbus.disable_unit(self._bus, unit_name)
             except _sdbus.SystemdDBusError as e:
                 raise SystemdError("disable_unit failed for {!r}: {}".format(unit_name, e))
         else:
@@ -279,7 +326,7 @@ class SystemdManager:
 
     def timezone(self):
         """Get the system timezone. Returns None if D-Bus is unavailable."""
-        if not self._dbus_available:
+        if not self._dbus_available or not self._bus:
             return None
         return self._get_property(
             "org.freedesktop.timedate1",
@@ -288,6 +335,36 @@ class SystemdManager:
             "Timezone",
             "s",
         )
+
+    def active(self, unit_name):
+        """Check if a systemd unit is active (running)"""
+        unit_name = unit_name if unit_name.endswith(".service") else "{}.service".format(unit_name)
+        if self._dbus_available:
+            try:
+                active_state = _sdbus.get_unit_property(self._bus, unit_name, "ActiveState")
+                return active_state == "active"
+            except _sdbus.SystemdDBusError as e:
+                raise SystemdError("Failed to get ActiveState for {!r}: {}".format(unit_name, e))
+        else:
+            return self._fallback_active(unit_name)
+
+    def _fallback_active(self, unit_name, timeout=10):
+        try:
+            process = subprocess.Popen(["systemctl", "is-active", unit_name], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            try:
+                process.communicate(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.communicate()
+                raise SystemdError(
+                    "systemctl is-active timed out after {} seconds for {!r}".format(
+                        timeout, unit_name
+                    )
+                )
+            return process.returncode == 0
+        except OSError as e:
+            raise SystemdError("Failed to check active state for {!r}: {}".format(unit_name, e))
+
 
     def pid(self, unit_name):
         """Get the main PID of a systemd unit. Returns None if not running."""
@@ -311,44 +388,36 @@ class SystemdManager:
         try:
             # This should only ever return a number that can fit into an int, but because of the Python 2 api, 
             # can return as a long. If we convert it to an int that can be used by an external process.
-            pid = int(_sdbus.get_unit_property(unit_name, "MainPID"))
-            return pid if pid != 0 else None
+            pid = int(_sdbus.get_unit_property(self._bus, unit_name, "MainPID"))
+            return pid if pid > 0 else None
         except _sdbus.SystemdDBusError as e:
             raise SystemdError("Failed to get MainPID for {!r}: {}".format(unit_name, e))
         except ValueError as e:
             raise SystemdError("MainPID for {!r} not a valid number: {}. This is likely a bug in the c code".format(unit_name, e))
 
-    def container(self):
-        """Returns None if it is not running in a container, or a string identifying the container type if it is"""
+    def virtualization(self):
+        """Returns None if it is not running in some virtualization, or a string identifying the type if it is"""
         if self._dbus_available:
             try:
                 val = _sdbus.get_property(
+                    self._bus,
                     "org.freedesktop.systemd1",
                     "/org/freedesktop/systemd1",
                     "org.freedesktop.systemd1.Manager",
                     "Virtualization",
                     "s",
                 )
-            except _sdbus.SystemdDBusError as e:
-                raise SystemdError("Failed to get Container property: {}".format(e))
-
-            if val:
-                container_types = {
-                    "docker", "lxc", "lxc-libvirt", "lxc-oci", "rkt", "systemd-nspawn", "podman", "wsl", "proot", "pouch",
-                }
-
-                return val if val in container_types else None
-        # Checking dbus for this property doesn't always work, so if val is empty, try the fallback anyway
-        return self._fallback_container()
-
-    def _fallback_container(self):
-        try:
-            with open("/run/systemd/container") as f:
-                val = f.read().strip()
                 return val if val else None
-        except OSError:
-            pass
+            except _sdbus.SystemdDBusError as e:
+                raise SystemdError("Failed to get virtualization property: {}".format(e))
 
+        else:
+            return None
+
+    def container(self):
+        # systemd-detect-virt is probably the best way to figure out if we're in a container.
+        # It does a lot of different things to try to determine if it's running in a container and is more
+        # reliable than checking the dbus property
         try:
             process = subprocess.Popen(
                 ["systemd-detect-virt", "--container"],
@@ -357,12 +426,23 @@ class SystemdManager:
             )
             stdout, _ = process.communicate(timeout=5)
             if process.returncode == 0:
-                return stdout.decode().strip() or None
+                out = stdout.decode().strip()
+                if out == "none":
+                    return None
+                return out or None
 
 
         except (OSError, subprocess.TimeoutExpired) as e:
             warnings.warn("Error occured while trying to detect if we're running in a container: {}".format(e))
             pass
+
+        try:
+            with open("/run/systemd/container") as f:
+                val = f.read().strip()
+                return val if val else None
+        except OSError:
+            pass
+
 
         # Absolute last resort - if we still can't detect anything, we're probably not in a container
         try:
@@ -380,4 +460,12 @@ class SystemdManager:
             pass
 
         return None
+
+    def log(self, message, log_level=syslog.LOG_INFO):
+        """Log a message to syslog, which should log to journald. 
+        Valid log levels can be found in the syslog module.
+        By default, it is set to LOG_INFO.
+        """
+        syslog.syslog(log_level, message)
+
 

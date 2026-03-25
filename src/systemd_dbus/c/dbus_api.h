@@ -31,14 +31,18 @@ typedef struct {
 typedef struct {
   char type;
   union {
-    const char *s;
-    uint32_t u;
-    int32_t i;
-    uint64_t t;
-    int64_t x;
-    int b;
+    uint8_t  y;   // BYTE
+    int16_t  n;   // INT16
+    uint16_t q;   // UINT16
+    int32_t  i;   // INT32
+    uint32_t u;   // UINT32
+    int64_t  x;   // INT64
+    uint64_t t;   // UINT64
+    double   d;   // DOUBLE
+    int      b;   // BOOLEAN
+    int      h;   // UNIX_FD
   } val;
-  char s_buf[1024];
+  char s_buf[1024]; // STRING ('s'), OBJECT PATH ('o'), SIGNATURE ('g')
 } DBusValue;
 
 typedef struct {
@@ -51,28 +55,27 @@ extern const PropertyInfo known_properties[];
 
 int check_dbus_available(char *errbuf, size_t errbuf_len);
 
-int call_method(const char *method, const char *unit, char *errbuf,
+int ping_dbus(sd_bus *bus, char *errbuf, size_t errbuf_len);
+
+int call_method(sd_bus *bus, const char *method, const char *unit, char *errbuf,
                        size_t errbuf_len);
 
-int read_message_value(sd_bus_message *reply, const char *type,
-                              DBusValue *out, char *errbuf, size_t errbuf_len);
-
-int get_unit_property_raw(const char *unit_name, const char *property,
+int get_unit_property_raw(sd_bus *bus, const char *unit_name, const char *property,
                                  const char *interface, const char *type,
                                  DBusValue *out, char *errbuf,
                                  size_t errbuf_len);
 
-int get_property(const char *destination, const char *path,
+int get_property(sd_bus *bus, const char *destination, const char *path,
                         const char *interface, const char *property,
                         const char *type, DBusValue *out,
                         char *errbuf, size_t errbuf_len);
 
-int enable_unit(const char *unit_name, int *carries_install_info,
+int enable_unit(sd_bus *bus, const char *unit_name, int *carries_install_info,
                        UnitChange **changes_out, size_t *num_changes_out,
                        char *errbuf, size_t errbuf_len);
 
-int disable_unit(const char *unit_name, UnitChange **changes_out,
+int disable_unit(sd_bus *bus, const char *unit_name, UnitChange **changes_out,
                         size_t *num_changes_out, char *errbuf,
                         size_t errbuf_len);
 
-int daemon_reload(char *errbuf, size_t errbuf_len);
+int daemon_reload(sd_bus *bus, char *errbuf, size_t errbuf_len);

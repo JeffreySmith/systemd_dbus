@@ -1,0 +1,42 @@
+#!/usr/bin/make -f
+export DH_VERBOSE
+
+PYTHON_VERSION ?= 3.11
+PYTHON = python$(PYTHON_VERSION)
+
+export PYBUILD_NAME=systemd-dbus
+export PYBUILD_INTERPRETERS = $(PYTHON)
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+DPKG_EXPORT_BUILDFLAGS = 1
+include /usr/share/dpkg/buildflags.mk
+%:
+	dh $@ --buildsystem=pybuild
+
+override_dh_auto_configure:
+	sed 's/@PYTHON@/python$(PYTHON_VERSION)/g' \
+		debian/control.in > debian/control
+	sed 's/@PYTHON@/python$(PYTHON_VERSION)/g' \
+		debian/python-systemd-dbus.install.in > \
+	debian/python$(PYTHON_VERSION)-systemd-dbus.install
+	$(PYTHON) setup.py build_ext
+
+override_dh_installdocs:
+	dh_installdocs README.md
+	install -d $(CURDIR)/debian/python$(PYTHON_VERSION)-systemd-dbus/usr/share/doc/python$(PYTHON_VERSION)-systemd_dbus
+	install -m 644 debian/copyright \
+		$(CURDIR)/debian/python$(PYTHON_VERSION)-systemd-dbus/usr/share/doc/python$(PYTHON_VERSION)-systemd-dbus/copyright
+
+override_dh_auto_install:
+	$(PYTHON) -m pip install \
+		--no-build-isolation \
+		--no-deps \
+		--ignore-installed \
+		--target $(CURDIR)/debian/tmp/usr/lib/$(PYTHON)/dist-packages \
+                .
+	rm -rf $(CURDIR)/debian/tmp/usr/lib/python3.11/dist-packages/systemd_dbus/c
+	rm -rf $(CURDIR)/debian/tmp/usr/lib/python3.11/dist-packages/systemd_dbus-$(DEB_VERSION_UPSTREAM).dist-info/licenses
+	rm -f $(CURDIR)/debian/tmp/usr/lib/python3.11/dist-packages/systemd_dbus-$(DEB_VERSION_UPSTREAM).dist-info/direct_url.json
+
+
+override_dh_auto_test:
+	$(PYTHON) -m pytest tests/ -m "not integration" || true
