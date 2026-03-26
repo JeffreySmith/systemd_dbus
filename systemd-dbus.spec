@@ -58,6 +58,7 @@ permission is denied.
 
 %package -n python%{python3_pkgversion}-systemd-dbus
 Summary:        Python %{python3_pkgversion} bindings for %{name}
+Requires:       polkit
 Requires:       python%{python3_pkgversion}
 Requires:       systemd-libs
 
@@ -74,6 +75,7 @@ permission is denied.
 %if %{with_python2}
 %package -n python2-systemd-dbus
 Summary:        Python 2 bindings for systemd D-Bus management
+Requires:       polkit
 Requires:       python2
 Requires:       systemd-libs
 

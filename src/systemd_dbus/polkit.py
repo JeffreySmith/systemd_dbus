@@ -71,8 +71,15 @@ class PolkitRule:
 
     def write(self, dir="/usr/share/polkit-1/rules.d/"):
         """Write the polkit rule to a file."""
+        version = self.version()
+        if version is None or version < 106:
+            Logger.warn(
+                "Polkit not installed, or does not support JS rules, skipping writing rule"
+            )
+            return False
         filename = os.path.join(dir, self.name)
         sudo.create_file(filename, self.render(), encoding="utf-8")
+        return True
 
     def version(self):
         """Get the version of polkit installed on the system or None if not available."""

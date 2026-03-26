@@ -5,7 +5,7 @@ Priority: optional
 Build-Depends:
 	@PYTHON@,
 	@PYTHON@-dev,
-	debhelper (>= 13),
+	debhelper (>= 12),
 	gcc,
 	libsystemd-dev
 Standards-Version: 4.6.0
@@ -18,7 +18,8 @@ Depends:
 	${misc:Depends},
 	${shlibs:Depends},
 	@PYTHON@,
-	libsystemd0
+	libsystemd0,
+	polkitd
 Description: Python bindings for systemd D-Bus management
  A Python library providing thin bindings for managing systemd units
  and querying D-Bus properties via libsystemd.
