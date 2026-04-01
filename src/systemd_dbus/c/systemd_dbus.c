@@ -26,7 +26,9 @@ under the License.
 #include <stdlib.h>
 #include <string.h>
 #include <systemd/sd-bus.h>
-// Some of the C api changed between Python 2 and 3
+// Some of the C api changed between Python 2 and 3. Redirect the old names to
+// the new ones for building for Python 2.
+// This will only run when this is building in Python 2
 #if PY_MAJOR_VERSION < 3
 #define PyLong_FromLong PyInt_FromLong
 #define PyUnicode_FromString PyString_FromString
@@ -39,6 +41,8 @@ typedef struct {
   PyObject_HEAD sd_bus *bus;
 } BusObject;
 
+// Used to automatically deallocate the bus connection when the object goes
+// out of scope in Python
 static void Bus_dealloc(BusObject *self) {
   if (self->bus) {
     sd_bus_unref(self->bus);
@@ -47,6 +51,7 @@ static void Bus_dealloc(BusObject *self) {
   Py_TYPE(self)->tp_free((PyObject *)self);
 }
 
+// Initialize the bus connection when the object is created in Python
 static PyObject *Bus_new(PyTypeObject *type, PyObject *args, PyObject *kwds) {
   BusObject *self = (BusObject *)type->tp_alloc(type, 0);
   if (!self) {
@@ -57,6 +62,7 @@ static PyObject *Bus_new(PyTypeObject *type, PyObject *args, PyObject *kwds) {
   return (PyObject *)self;
 }
 
+// Actual initialization of the bus connection
 static int Bus_init(BusObject *self, PyObject *args, PyObject *kwds) {
   int r;
 
@@ -70,12 +76,12 @@ static int Bus_init(BusObject *self, PyObject *args, PyObject *kwds) {
 
   return r < 0 ? r : 0;
 }
-
+// Gives a `with bus_connection as b:` type of context in Python
 static PyObject *Bus_enter(BusObject *self, PyObject *args) {
   Py_INCREF(self);
   return (PyObject *)self;
 }
-
+// Deallocs the bus connection when exiting the context in Python
 static PyObject *Bus_exit(BusObject *self, PyObject *args) {
   if (self->bus) {
     sd_bus_unref(self->bus);
@@ -83,7 +89,8 @@ static PyObject *Bus_exit(BusObject *self, PyObject *args) {
   }
   Py_RETURN_FALSE;
 }
-
+// Let Python know about the __enter__ and __exit__ methods for the context
+// manager
 static PyMethodDef Bus_methods[] = {
     {"__enter__", (PyCFunction)Bus_enter, METH_NOARGS,
      "Enter the runtime context related to this object."},
@@ -91,6 +98,7 @@ static PyMethodDef Bus_methods[] = {
      "Exit the runtime context related to this object."},
     {NULL, NULL, 0, NULL}};
 
+// Define the Bus for Python
 static PyTypeObject BusType = {
     PyVarObject_HEAD_INIT(NULL, 0).tp_name = "_sdbus.Bus",
     .tp_basicsize = sizeof(BusObject),
@@ -110,6 +118,9 @@ static const PropertyInfo *lookup_property(const char *property) {
   return NULL;
 }
 
+// Clean up an array of UnitChange structs. It should be safe
+// to call this multiple times on the same pointer since they are set to NULL
+// after being freed
 static void free_unit_changes(UnitChange *changes, size_t num) {
   if (!changes)
     return;
@@ -125,6 +136,8 @@ static void free_unit_changes(UnitChange *changes, size_t num) {
   free(changes);
 }
 
+// This initially checks if DBus is available, before a persistent connection is
+// made
 static PyObject *py_check_dbus_available(PyObject *self, PyObject *args) {
   char errbuf[1024] = {0};
   int r;
@@ -143,6 +156,8 @@ static PyObject *py_check_dbus_available(PyObject *self, PyObject *args) {
   Py_RETURN_TRUE;
 }
 
+// This is for checking the dbus connection after a persistent connection has
+// been made
 static PyObject *py_ping_dbus(PyObject *self, PyObject *args) {
   BusObject *bus;
   char errbuf[1024] = {0};
@@ -171,6 +186,7 @@ static PyObject *py_ping_dbus(PyObject *self, PyObject *args) {
   Py_RETURN_TRUE;
 }
 
+// Start a unit file using the dbus connection
 static PyObject *py_start_unit(PyObject *self, PyObject *args) {
   BusObject *bus;
   const char *unit;
@@ -188,6 +204,8 @@ static PyObject *py_start_unit(PyObject *self, PyObject *args) {
     return NULL;
   }
 
+  // Make a local copy of the unit name since we are releasing the thread, and
+  // `unit` comes from Python
   unit_copy = strdup(unit);
   if (!unit_copy) {
     return PyErr_NoMemory();
@@ -210,6 +228,7 @@ static PyObject *py_start_unit(PyObject *self, PyObject *args) {
   Py_RETURN_NONE;
 }
 
+// Stop a unit file using the persistent dbus connection
 static PyObject *py_stop_unit(PyObject *self, PyObject *args) {
   BusObject *bus;
   const char *unit;
@@ -226,6 +245,8 @@ static PyObject *py_stop_unit(PyObject *self, PyObject *args) {
     PyErr_SetString(SystemdDBusError, "Bus connection is not connected");
     return NULL;
   }
+  // Make a local copy of the unit name since we are releasing the thread, and
+  // `unit` comes from Python
 
   unit_copy = strdup(unit);
   if (!unit_copy) {
@@ -248,7 +269,7 @@ static PyObject *py_stop_unit(PyObject *self, PyObject *args) {
   // This is actually returning, ignore any static checkers
   Py_RETURN_NONE;
 }
-
+// Restart a unit file using the persistent dbus connection
 static PyObject *py_restart_unit(PyObject *self, PyObject *args) {
   BusObject *bus;
   const char *unit;
@@ -263,6 +284,8 @@ static PyObject *py_restart_unit(PyObject *self, PyObject *args) {
     PyErr_SetString(SystemdDBusError, "Bus connection is not connected");
     return NULL;
   }
+  // Make a local copy of the unit name since we are releasing the thread, and
+  // `unit` comes from Python
 
   unit_copy = strdup(unit);
   if (!unit_copy) {
@@ -286,6 +309,7 @@ static PyObject *py_restart_unit(PyObject *self, PyObject *args) {
   Py_RETURN_NONE;
 }
 
+// Do the correct type conversion for the value returned from D-Bus
 static PyObject *dbus_val_to_python(const DBusValue *val) {
   switch (val->type) {
   // String types
@@ -333,6 +357,8 @@ static PyObject *dbus_val_to_python(const DBusValue *val) {
   }
 }
 
+// Get a property from a particular unit file from a list of known properties.
+// This prevents requiring knowledge of the type and interface
 static PyObject *py_get_unit_property(PyObject *self, PyObject *args) {
   const char *unit_name;
   const char *property;
@@ -358,6 +384,9 @@ static PyObject *py_get_unit_property(PyObject *self, PyObject *args) {
     PyErr_Format(PyExc_ValueError, "Unknown property: %s", property);
     return NULL;
   }
+  // Make a local copy since we are releasing the thread, and
+  // these comes from Python
+
   unit_name_copy = strdup(unit_name);
   property_copy = strdup(property);
 
@@ -383,6 +412,7 @@ Py_BEGIN_ALLOW_THREADS
     sizeof(errbuf)
   );
 Py_END_ALLOW_THREADS
+  //clang-format on
 
   free(unit_name_copy);
   free(property_copy);
@@ -394,9 +424,9 @@ Py_END_ALLOW_THREADS
   }
 
   return dbus_val_to_python(&val);
-  //clang-format on
 }
 
+// Just a way to check that some passed DBus type is valid
 static bool valid_property_type(char type) {
   if (!type) {
     return false;
@@ -412,6 +442,7 @@ static bool valid_property_type(char type) {
   }
 }
 
+// Get some arbitrary property from DBus
 static PyObject *py_get_property(PyObject *self, PyObject *args) {
   const char *destination;
   const char *path;
@@ -446,6 +477,8 @@ static PyObject *py_get_property(PyObject *self, PyObject *args) {
       PyErr_Format(PyExc_ValueError, "Unsupported D-Bus type: %s", type);
       return NULL;
   }
+  // Make a local copy since we are releasing the thread, and
+  // these comes from Python
   destination_copy = strdup(destination);
   path_copy = strdup(path);
   interface_copy = strdup(interface);
@@ -470,6 +503,8 @@ Py_BEGIN_ALLOW_THREADS
   r = get_property(bus->bus, destination_copy, path_copy, interface_copy, property_copy, type_copy, &val, errbuf, sizeof(errbuf));
 
 Py_END_ALLOW_THREADS
+  //clang-format on
+
   free(destination_copy);
   free(path_copy);
   free(interface_copy);
@@ -485,9 +520,11 @@ Py_END_ALLOW_THREADS
     return NULL;
   }
   return dbus_val_to_python(&val);
-  //clang-format on
 }
 
+// Similar to py_get_unit_property but allows the caller to specify the 
+// interface and D-Bus type explicitly, so it can be used for properties
+// that are not known ahead of time
 static PyObject *py_get_unit_property_raw(PyObject *self, PyObject *args) {
   BusObject *bus;
   const char *unit_name;
@@ -541,20 +578,20 @@ static PyObject *py_get_unit_property_raw(PyObject *self, PyObject *args) {
     type_copy = NULL;
     return PyErr_NoMemory();
   }
+  // clang-format off
+  Py_BEGIN_ALLOW_THREADS
+    r = get_unit_property_raw(
+        bus->bus,
+        unit_name_copy,
+        property_copy,
+        interface,
+        type,
+        &val,
+        errbuf,
+        sizeof(errbuf)
+    );
+  Py_END_ALLOW_THREADS
 
-    Py_BEGIN_ALLOW_THREADS
-        r = get_unit_property_raw(
-            bus->bus,
-            unit_name_copy,
-            property_copy,
-            interface,
-            type,
-            &val,
-            errbuf,
-            sizeof(errbuf)
-        );
-    Py_END_ALLOW_THREADS
-    
   free(unit_name_copy);
   free(interface_copy);
   free(property_copy);
@@ -564,6 +601,7 @@ static PyObject *py_get_unit_property_raw(PyObject *self, PyObject *args) {
   property_copy = NULL;
   type_copy = NULL;
 
+  // clang-format on
   if (r < 0) {
     PyErr_SetString(SystemdDBusError, errbuf);
     return NULL;
@@ -572,15 +610,19 @@ static PyObject *py_get_unit_property_raw(PyObject *self, PyObject *args) {
   return dbus_val_to_python(&val);
 }
 
-static PyObject *build_changes_list(const UnitChange *changes, size_t num_changes) {
+// Build a Python list of the changes made by enabling a unit file.
+static PyObject *build_changes_list(const UnitChange *changes,
+                                    size_t num_changes) {
   PyObject *list = PyList_New(num_changes);
-  if (!list) return NULL;
+  if (!list)
+    return NULL;
 
   for (size_t i = 0; i < num_changes; i++) {
     PyObject *type_str = PyUnicode_FromString(changes[i].type);
-    PyObject *sym_str  = PyUnicode_FromString(changes[i].symlink_path);
+    PyObject *sym_str = PyUnicode_FromString(changes[i].symlink_path);
     PyObject *dest_str = PyUnicode_FromString(changes[i].dest);
 
+    // Something went horribly wrong
     if (!type_str || !sym_str || !dest_str) {
       Py_XDECREF(type_str);
       Py_XDECREF(sym_str);
@@ -589,6 +631,7 @@ static PyObject *build_changes_list(const UnitChange *changes, size_t num_change
       return NULL;
     }
 
+    // Build a tuple out of what was changed
     PyObject *tuple = PyTuple_Pack(3, type_str, sym_str, dest_str);
     Py_DECREF(type_str);
     Py_DECREF(sym_str);
@@ -603,19 +646,20 @@ static PyObject *build_changes_list(const UnitChange *changes, size_t num_change
   return list;
 }
 
-
+// Enable a unit file using the persistent dbus connection.
 static PyObject *py_enable_unit(PyObject *self, PyObject *args) {
   const char *unit;
   char *unit_copy = NULL;
   char errbuf[1024] = {0};
-  // carries_install_info reports back true if there is an [Install] section in the unit file
+  // carries_install_info reports back true if there is an [Install] section in
+  // the unit file
   int r, carries_install_info = 0;
   UnitChange *changes = NULL;
   size_t num_changes = 0;
 
   BusObject *bus;
 
-  if (!PyArg_ParseTuple(args, "O!s", &BusType, &bus, &unit)){
+  if (!PyArg_ParseTuple(args, "O!s", &BusType, &bus, &unit)) {
     return NULL;
   }
 
@@ -658,7 +702,7 @@ static PyObject *py_enable_unit(PyObject *self, PyObject *args) {
   Py_DECREF(changes_list);
   return result;
 }
-
+// Disable a unit file using the persistent dbus connection
 static PyObject *py_disable_unit(PyObject *self, PyObject *args) {
   const char *unit;
   char *unit_copy = NULL;
@@ -700,6 +744,7 @@ static PyObject *py_disable_unit(PyObject *self, PyObject *args) {
   return changes_list;
 }
 
+// Reload the systemd daemon. Must be used after making any changes to a unit file
 static PyObject *py_daemon_reload(PyObject *self, PyObject *args) {
   char errbuf[1024] = {0};
   int r;
@@ -727,6 +772,9 @@ static PyObject *py_daemon_reload(PyObject *self, PyObject *args) {
   // This is actually returning, ignore any static checkers
   Py_RETURN_NONE;
 }
+
+// Define the functions available to Python. These will be exposed to the
+// runtime
 
 static struct PyMethodDef sdbus_methods[] = {
     {"start_unit", py_start_unit, METH_VARARGS,
@@ -781,6 +829,7 @@ static struct PyMethodDef sdbus_methods[] = {
     // The last one must always be NULL
     {NULL, NULL, 0, NULL}};
 
+// Initialize the module in ways that work for both Python 2 and Python 3.
 static PyObject *_init_module(void) {
   PyObject *m;
 #if PY_MAJOR_VERSION >= 3
