@@ -15,14 +15,21 @@ KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.
 """
+import os
+import sys
 import warnings
 from .manager import SystemdManager
 
 __all__ = ["SystemdManager"]
+
+AMBARI_AGENT_LIB_PATH = "/usr/lib/ambari-agent/lib"
+
+if os.path.exists(AMBARI_AGENT_LIB_PATH):
+    sys.path.append(AMBARI_AGENT_LIB_PATH)
 
 try:
     from .unit import UnitFile
     from .polkit import PolkitRule
     __all__ += ["UnitFile", "PolkitRule"]
 except ImportError:
-    warnings.warn("Not running through Ambari, disabling 'UnitFile and 'PolkitRule'")
+    warnings.warn("Not running through Ambari, disabling 'UnitFile' and 'PolkitRule'")
