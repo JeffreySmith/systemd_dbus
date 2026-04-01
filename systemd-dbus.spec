@@ -29,6 +29,7 @@
   %global with_python2 0
 %endif
 
+
 Name:           systemd-dbus
 Version:        0.3
 Release:        1%{?dist}
@@ -36,7 +37,7 @@ Summary:        Python bindings for systemd D-Bus management
 
 License:        Apache-2.0
 URL:            https://github.com/JeffreySmith/systemd_dbus
-Source0:        %{url}/archive/refs/tags/v%{version}.tar.gz#/%{name}-%{version}.tar.gz
+Source0:        %{name}-%{version}.tar.gz
 
 BuildRequires:  gcc
 BuildRequires:  systemd-devel
@@ -91,7 +92,7 @@ permission is denied.
 %endif
 
 %prep
-%autosetup -n systemd_dbus-%{version}
+%autosetup -n %{name}-%{version}
 
 %build
 %{__python3} setup.py build
