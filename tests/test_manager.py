@@ -73,7 +73,7 @@ def test_pid_none_less_equal_zero(manager, mock_sdbus):
     assert manager.pid("sshd.service") is None
 
 def test_active_raises_on_error(manager, mock_sdbus):
-    mock_sdbus.get_unit_property.side_effect = mock_sdbus.SystemdDbusError("Unit not found")
+    mock_sdbus.get_unit_property.side_effect = mock_sdbus.SystemdDBusError("Unit not found")
     from systemd_dbus.manager import SystemdError
     with pytest.raises(SystemdError):
         manager.active("nonexistent.service")
