@@ -26,7 +26,8 @@ if sys.platform != "linux":
 
 @pytest.fixture
 def mock_sdbus():
-    with patch("systemd_dbus.manager._sdbus.SystemdDBusError") as mock:
+    with patch("systemd_dbus.manager._sdbus") as mock, \
+        patch("systemd_dbus.manager._sdbus.SystemdDBusError"):
 
         class MockSystemdDBusError(Exception):
             pass
