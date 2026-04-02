@@ -84,3 +84,5 @@ int daemon_reload(sd_bus *bus, char *errbuf, size_t errbuf_len);
 const PropertyInfo *lookup_property(const char *property);
 
 bool valid_property_type(char type);
+
+void free_unit_changes(UnitChange *changes, size_t num);

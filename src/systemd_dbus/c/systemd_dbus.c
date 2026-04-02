@@ -397,8 +397,12 @@ Py_END_ALLOW_THREADS
 
   free(unit_name_copy);
   free(property_copy);
+  free(interface_copy);
+  free(type_copy);
   unit_name_copy = NULL;
   property_copy = NULL;
+  interface_copy = NULL;
+  type_copy = NULL;
   if (r < 0) {
     PyErr_SetString(SystemdDBusError, errbuf);
     return NULL;
