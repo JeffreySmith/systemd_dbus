@@ -26,16 +26,15 @@ if sys.platform != "linux":
 
 @pytest.fixture
 def mock_sdbus():
-    with patch("systemd_dbus.manager._sdbus") as mock, \
-        patch("systemd_dbus.manager._sdbus.SystemdDBusError", Exception):
+    with patch("systemd_dbus.manager._sdbus.SystemdDBusError") as mock:
 
-        class MockSystemdDbusError(Exception):
+        class MockSystemdDBusError(Exception):
             pass
 
-        mock.SystemdDbusError = MockSystemdDbusError
+        mock.SystemdDBusError = MockSystemdDBusError
         mock.Bus.return_value = MagicMock()
         mock.container.return_value = ""
-        mock.test_check_dbus_available.return_value = True
+        mock.check_dbus_available.return_value = True
         mock.get_unit_property.return_value = "active"
         mock.get_property.return_value = ""
 

@@ -19,6 +19,7 @@ under the License.
 #include <assert.h>
 #include <errno.h>
 #include <inttypes.h>
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -52,6 +53,31 @@ const PropertyInfo *lookup_property(const char *property) {
     }
   }
   return NULL;
+}
+
+// Just a way to check that some passed DBus type is valid
+bool valid_property_type(char type) {
+  if (!type) {
+    return false;
+  }
+  switch (type) {
+  case 'y':
+  case 'b':
+  case 'n':
+  case 'q':
+  case 'i':
+  case 'u':
+  case 'x':
+  case 't':
+  case 'd':
+  case 's':
+  case 'o':
+  case 'g':
+  case 'h':
+    return true;
+  default:
+    return false;
+  }
 }
 
 /**
@@ -330,6 +356,35 @@ static int read_message_value(sd_bus_message *reply, const char *type,
   case 'b':
     r = sd_bus_message_read(reply, "b", &out->val.b);
     break;
+  case 'y':
+    r = sd_bus_message_read(reply, "y", &out->val.y);
+    break;
+  case 'n':
+    r = sd_bus_message_read(reply, "n", &out->val.n);
+    break;
+  case 'q':
+    r = sd_bus_message_read(reply, "q", &out->val.q);
+    break;
+  case 'd':
+    r = sd_bus_message_read(reply, "d", &out->val.d);
+    break;
+  case 'h':
+    r = sd_bus_message_read(reply, "h", &out->val.h);
+    break;
+  case 'o': {
+    const char *val = NULL;
+    r = sd_bus_message_read(reply, "o", &val);
+    if (r >= 0)
+      snprintf(out->s_buf, sizeof(out->s_buf), "%s", val ? val : "");
+    break;
+  }
+  case 'g': {
+    const char *val = NULL;
+    r = sd_bus_message_read(reply, "g", &val);
+    if (r >= 0)
+      snprintf(out->s_buf, sizeof(out->s_buf), "%s", val ? val : "");
+    break;
+  }
   default:
     snprintf(errbuf, errbuf_len, "Unsupported type: %c", type[0]);
     return -EINVAL;
