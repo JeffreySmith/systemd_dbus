@@ -368,7 +368,7 @@ static PyObject *py_get_unit_property(PyObject *self, PyObject *args) {
   type_copy = strdup(info->type);
 
   // Since they're all set to NULL by default, this should be safe
-  if (!unit_name_copy || !property_copy || interface_copy || type_copy) {
+  if (!unit_name_copy || !property_copy || !interface_copy || !type_copy) {
     free(unit_name_copy);
     free(property_copy);
     free(interface_copy);
