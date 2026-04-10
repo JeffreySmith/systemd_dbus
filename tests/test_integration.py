@@ -91,3 +91,33 @@ def test_get_property_types(manager):
 
     assert time > 0 
 
+def test_additional_properties(manager):
+
+    # The number of known units
+    num_units = manager._get_property(
+        "org.freedesktop.systemd1",
+        "/org/freedesktop/systemd1",
+        "org.freedesktop.systemd1.Manager",
+        "NNames", "u"
+    )
+    assert isinstance(num_units, int)
+    assert num_units > 0
+
+    # Returns a byte
+    exit_code = manager._get_property(
+        "org.freedesktop.systemd1",
+        "/org/freedesktop/systemd1",
+        "org.freedesktop.systemd1.Manager",
+        "ExitCode", "y"
+    )
+    assert isinstance(exit_code, int)
+
+    # Should return some value between 0.0 and 1.
+    progress = manager._get_property(
+        "org.freedesktop.systemd1",
+        "/org/freedesktop/systemd1",
+        "org.freedesktop.systemd1.Manager",
+        "Progress", "d"
+    )
+    assert isinstance(progress, float)
+    assert 0.0 <= progress <= 1.0

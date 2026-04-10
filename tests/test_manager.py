@@ -27,15 +27,15 @@ if sys.platform != "linux":
 @pytest.fixture
 def mock_sdbus():
     with patch("systemd_dbus.manager._sdbus") as mock, \
-        patch("systemd_dbus.manager._sdbus.SystemdDBusError", Exception):
+        patch("systemd_dbus.manager._sdbus.SystemdDBusError"):
 
-        class MockSystemdDbusError(Exception):
+        class MockSystemdDBusError(Exception):
             pass
 
-        mock.SystemdDbusError = MockSystemdDbusError
+        mock.SystemdDBusError = MockSystemdDBusError
         mock.Bus.return_value = MagicMock()
         mock.container.return_value = ""
-        mock.test_check_dbus_available.return_value = True
+        mock.check_dbus_available.return_value = True
         mock.get_unit_property.return_value = "active"
         mock.get_property.return_value = ""
 
@@ -73,7 +73,7 @@ def test_pid_none_less_equal_zero(manager, mock_sdbus):
     assert manager.pid("sshd.service") is None
 
 def test_active_raises_on_error(manager, mock_sdbus):
-    mock_sdbus.get_unit_property.side_effect = mock_sdbus.SystemdDbusError("Unit not found")
+    mock_sdbus.get_unit_property.side_effect = mock_sdbus.SystemdDBusError("Unit not found")
     from systemd_dbus.manager import SystemdError
     with pytest.raises(SystemdError):
         manager.active("nonexistent.service")

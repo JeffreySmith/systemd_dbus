@@ -19,6 +19,7 @@ under the License.
 
 #include <stddef.h>
 #include <stdint.h>
+#include <stdbool.h>
 #include <systemd/sd-bus.h>
 
 typedef struct {
@@ -79,3 +80,9 @@ int disable_unit(sd_bus *bus, const char *unit_name, UnitChange **changes_out,
                         size_t errbuf_len);
 
 int daemon_reload(sd_bus *bus, char *errbuf, size_t errbuf_len);
+
+const PropertyInfo *lookup_property(const char *property);
+
+bool valid_property_type(char type);
+
+void free_unit_changes(UnitChange *changes, size_t num);

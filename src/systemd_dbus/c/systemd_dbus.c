@@ -109,33 +109,6 @@ static PyTypeObject BusType = {
     .tp_init = (initproc)Bus_init,
     .tp_new = Bus_new};
 
-static const PropertyInfo *lookup_property(const char *property) {
-  for (const PropertyInfo *p = known_properties; p->property; p++) {
-    if (strcmp(p->property, property) == 0) {
-      return p;
-    }
-  }
-  return NULL;
-}
-
-// Clean up an array of UnitChange structs. It should be safe
-// to call this multiple times on the same pointer since they are set to NULL
-// after being freed
-static void free_unit_changes(UnitChange *changes, size_t num) {
-  if (!changes)
-    return;
-
-  for (size_t i = 0; i < num; i++) {
-    free(changes[i].type);
-    free(changes[i].symlink_path);
-    free(changes[i].dest);
-    changes[i].type = NULL;
-    changes[i].symlink_path = NULL;
-    changes[i].dest = NULL;
-  }
-  free(changes);
-}
-
 // This initially checks if DBus is available, before a persistent connection is
 // made
 static PyObject *py_check_dbus_available(PyObject *self, PyObject *args) {
@@ -294,7 +267,7 @@ static PyObject *py_restart_unit(PyObject *self, PyObject *args) {
 
   // clang-format off
   Py_BEGIN_ALLOW_THREADS
-    r = call_method(bus->bus, "RestartUnit", unit, errbuf, sizeof(errbuf));
+    r = call_method(bus->bus, "RestartUnit", unit_copy, errbuf, sizeof(errbuf));
   Py_END_ALLOW_THREADS
 
   free(unit_copy);
@@ -366,6 +339,8 @@ static PyObject *py_get_unit_property(PyObject *self, PyObject *args) {
 
   char *unit_name_copy = NULL;
   char *property_copy = NULL;
+  char *interface_copy = NULL;
+  char *type_copy = NULL;
 
   char errbuf[1024] = {0};
   DBusValue val = {0};
@@ -389,13 +364,19 @@ static PyObject *py_get_unit_property(PyObject *self, PyObject *args) {
 
   unit_name_copy = strdup(unit_name);
   property_copy = strdup(property);
+  interface_copy = strdup(info->interface);
+  type_copy = strdup(info->type);
 
   // Since they're all set to NULL by default, this should be safe
-  if (!unit_name_copy || !property_copy) {
+  if (!unit_name_copy || !property_copy || !interface_copy || !type_copy) {
     free(unit_name_copy);
     free(property_copy);
+    free(interface_copy);
+    free(type_copy);
     unit_name_copy = NULL;
     property_copy = NULL;
+    interface_copy = NULL;
+    type_copy = NULL;
     return PyErr_NoMemory();
   }
 
@@ -405,8 +386,8 @@ Py_BEGIN_ALLOW_THREADS
     bus->bus,
     unit_name_copy,
     property_copy,
-    info->interface,
-    info->type,
+    interface_copy,
+    type_copy,
     &val,
     errbuf,
     sizeof(errbuf)
@@ -416,30 +397,18 @@ Py_END_ALLOW_THREADS
 
   free(unit_name_copy);
   free(property_copy);
+  free(interface_copy);
+  free(type_copy);
   unit_name_copy = NULL;
   property_copy = NULL;
+  interface_copy = NULL;
+  type_copy = NULL;
   if (r < 0) {
     PyErr_SetString(SystemdDBusError, errbuf);
     return NULL;
   }
 
   return dbus_val_to_python(&val);
-}
-
-// Just a way to check that some passed DBus type is valid
-static bool valid_property_type(char type) {
-  if (!type) {
-    return false;
-  }
-  switch (type) {
-    case 'y': case 'b': case 'n': case 'q':
-    case 'i': case 'u': case 'x': case 't':
-    case 'd': case 's': case 'o': case 'g':
-    case 'h':
-      return true;
-    default:
-      return false;
-  }
 }
 
 // Get some arbitrary property from DBus
@@ -817,7 +786,7 @@ static struct PyMethodDef sdbus_methods[] = {
      "system bus\n\n :param unit_name: The name of the service to "
      "disable\n:raises SystemdDbusError: If some error occurs while disabling "
      "the service.\n"},
-    {"daemon_reload", py_daemon_reload, METH_NOARGS,
+    {"daemon_reload", py_daemon_reload, METH_VARARGS,
      "daemon_reload(bus) -> None\nReload the Systemd daemon.\n\n:raises "
      "SystemDBusError: If some error occurs while reloading the Systemd "
      "daemon.\n"},

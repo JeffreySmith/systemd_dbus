@@ -43,9 +43,7 @@ class SystemdManager:
 
     def __init__(self):
         self._bus = None
-        self._dbus_available = SystemdManager._check_dbus()
-        self.container_type = self.container()
-        self._dbus_available = self.container_type is None
+        self._dbus_available = SystemdManager._check_dbus() and not self.container()
         if self._dbus_available:
             try:
                 self._bus = _sdbus.Bus()

@@ -69,7 +69,7 @@ class PolkitRule:
         )
         return self.rendered_template
 
-    def write(self, dir="/usr/share/polkit-1/rules.d/"):
+    def write(self, output_dir="/usr/share/polkit-1/rules.d/"):
         """Write the polkit rule to a file."""
         version = self.version()
         if version is None or version < 106:
@@ -83,7 +83,7 @@ class PolkitRule:
 
     def version(self):
         """Get the version of polkit installed on the system or None if not available."""
-        command = ["pkcheck", "--version"]
+        command = ["pkaction", "--version"]
         try:
             process = Popen(command, stdout=PIPE, stderr=PIPE)
         except OSError as e:

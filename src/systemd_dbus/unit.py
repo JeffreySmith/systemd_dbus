@@ -374,7 +374,6 @@ class UnitFile:
     def delete_key(self, key, value=None, **kwargs):
         """Delete a key. Optionally, the key must match `value`"""
         keys_to_delete = [(key, value)] + list(kwargs.items())
-        print(keys_to_delete)
         for section in self.options.values():
             for k, v in keys_to_delete:
                 section.delete(k, v)
