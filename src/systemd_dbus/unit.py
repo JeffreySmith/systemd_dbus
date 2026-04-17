@@ -263,6 +263,8 @@ class UnitFile:
                 ("RuntimeDirectory", runtime_directory),
                 ("LockPersonality", "yes"),
                 ("ProtectKernelModules", "yes"),
+                ("ProtectKernelTunables", "yes"),
+                ("ProtectControlGroups", "yes"),
                 ("NoNewPrivileges", "true"),
                 ("ProtectHome", "true"),
                 ("PrivateTmp", "true"),
