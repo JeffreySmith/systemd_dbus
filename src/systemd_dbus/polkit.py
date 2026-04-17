@@ -77,7 +77,7 @@ class PolkitRule:
                 "Polkit not installed, or does not support JS rules, skipping writing rule"
             )
             return False
-        filename = os.path.join(dir, self.name)
+        filename = os.path.join(output_dir, self.name)
         sudo.create_file(filename, self.render(), encoding="utf-8")
         return True
 
