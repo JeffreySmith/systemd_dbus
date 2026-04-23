@@ -6,6 +6,7 @@ Build-Depends:
 	@PYTHON@,
 	@PYTHON@-dev,
 	debhelper (>= 12),
+  dh-python,
 	gcc,
 	libsystemd-dev
 Standards-Version: 4.6.0
