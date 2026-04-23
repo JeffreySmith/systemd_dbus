@@ -213,9 +213,9 @@ class UnitFile:
 
     def __init__(
         self,
-        service_name,
+        service_name, # This is the name of the component overall. This could be "kudu", for example
         user,
-        component_name=None,
+        component_name=None, # component_name is the actual service name that will be started. IE "kudu-master"
         group=None,
         runtime_dir=None,
         folder="/usr/lib/systemd/system/",
