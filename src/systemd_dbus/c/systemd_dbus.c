@@ -52,7 +52,8 @@ static void Bus_dealloc(BusObject *self) {
 }
 
 // Initialize the bus connection when the object is created in Python
-static PyObject *Bus_new(PyTypeObject *type, PyObject *args, PyObject *kwds) {
+static PyObject *Bus_new(PyTypeObject *type, PyObject *Py_UNUSED(args),
+                         PyObject *Py_UNUSED(kwds)) {
   BusObject *self = (BusObject *)type->tp_alloc(type, 0);
   if (!self) {
     fprintf(stderr, "Failed to initialize Bus");
@@ -63,7 +64,8 @@ static PyObject *Bus_new(PyTypeObject *type, PyObject *args, PyObject *kwds) {
 }
 
 // Actual initialization of the bus connection
-static int Bus_init(BusObject *self, PyObject *args, PyObject *kwds) {
+static int Bus_init(BusObject *self, PyObject *Py_UNUSED(args),
+                    PyObject *Py_UNUSED(kwds)) {
   int r;
 
   r = sd_bus_open_system(&self->bus);
@@ -77,12 +79,12 @@ static int Bus_init(BusObject *self, PyObject *args, PyObject *kwds) {
   return r < 0 ? r : 0;
 }
 // Gives a `with bus_connection as b:` type of context in Python
-static PyObject *Bus_enter(BusObject *self, PyObject *args) {
+static PyObject *Bus_enter(BusObject *self, PyObject *Py_UNUSED(args)) {
   Py_INCREF(self);
   return (PyObject *)self;
 }
 // Deallocs the bus connection when exiting the context in Python
-static PyObject *Bus_exit(BusObject *self, PyObject *args) {
+static PyObject *Bus_exit(BusObject *self, PyObject *Py_UNUSED(args)) {
   if (self->bus) {
     sd_bus_unref(self->bus);
     self->bus = NULL;
@@ -111,7 +113,8 @@ static PyTypeObject BusType = {
 
 // This initially checks if DBus is available, before a persistent connection is
 // made
-static PyObject *py_check_dbus_available(PyObject *self, PyObject *args) {
+static PyObject *py_check_dbus_available(PyObject *Py_UNUSED(self),
+                                         PyObject *Py_UNUSED(args)) {
   char errbuf[1024] = {0};
   int r;
 
@@ -131,7 +134,7 @@ static PyObject *py_check_dbus_available(PyObject *self, PyObject *args) {
 
 // This is for checking the dbus connection after a persistent connection has
 // been made
-static PyObject *py_ping_dbus(PyObject *self, PyObject *args) {
+static PyObject *py_ping_dbus(PyObject *Py_UNUSED(self), PyObject *args) {
   BusObject *bus;
   char errbuf[1024] = {0};
   int r;
@@ -160,7 +163,7 @@ static PyObject *py_ping_dbus(PyObject *self, PyObject *args) {
 }
 
 // Start a unit file using the dbus connection
-static PyObject *py_start_unit(PyObject *self, PyObject *args) {
+static PyObject *py_start_unit(PyObject *Py_UNUSED(self), PyObject *args) {
   BusObject *bus;
   const char *unit;
   char errbuf[1024] = {0};
@@ -202,7 +205,7 @@ static PyObject *py_start_unit(PyObject *self, PyObject *args) {
 }
 
 // Stop a unit file using the persistent dbus connection
-static PyObject *py_stop_unit(PyObject *self, PyObject *args) {
+static PyObject *py_stop_unit(PyObject *Py_UNUSED(self), PyObject *args) {
   BusObject *bus;
   const char *unit;
   char errbuf[1024] = {0};
@@ -243,7 +246,7 @@ static PyObject *py_stop_unit(PyObject *self, PyObject *args) {
   Py_RETURN_NONE;
 }
 // Restart a unit file using the persistent dbus connection
-static PyObject *py_restart_unit(PyObject *self, PyObject *args) {
+static PyObject *py_restart_unit(PyObject *Py_UNUSED(self), PyObject *args) {
   BusObject *bus;
   const char *unit;
   char errbuf[1024] = {0};
@@ -332,7 +335,8 @@ static PyObject *dbus_val_to_python(const DBusValue *val) {
 
 // Get a property from a particular unit file from a list of known properties.
 // This prevents requiring knowledge of the type and interface
-static PyObject *py_get_unit_property(PyObject *self, PyObject *args) {
+static PyObject *py_get_unit_property(PyObject *Py_UNUSED(self),
+                                      PyObject *args) {
   const char *unit_name;
   const char *property;
   BusObject *bus;
@@ -412,7 +416,7 @@ Py_END_ALLOW_THREADS
 }
 
 // Get some arbitrary property from DBus
-static PyObject *py_get_property(PyObject *self, PyObject *args) {
+static PyObject *py_get_property(PyObject *Py_UNUSED(self), PyObject *args) {
   const char *destination;
   const char *path;
   const char *interface;
@@ -494,7 +498,7 @@ Py_END_ALLOW_THREADS
 // Similar to py_get_unit_property but allows the caller to specify the 
 // interface and D-Bus type explicitly, so it can be used for properties
 // that are not known ahead of time
-static PyObject *py_get_unit_property_raw(PyObject *self, PyObject *args) {
+static PyObject *py_get_unit_property_raw(PyObject *Py_UNUSED(self), PyObject *args) {
   BusObject *bus;
   const char *unit_name;
   const char *interface;
@@ -616,7 +620,7 @@ static PyObject *build_changes_list(const UnitChange *changes,
 }
 
 // Enable a unit file using the persistent dbus connection.
-static PyObject *py_enable_unit(PyObject *self, PyObject *args) {
+static PyObject *py_enable_unit(PyObject *Py_UNUSED(self), PyObject *args) {
   const char *unit;
   char *unit_copy = NULL;
   char errbuf[1024] = {0};
@@ -672,7 +676,7 @@ static PyObject *py_enable_unit(PyObject *self, PyObject *args) {
   return result;
 }
 // Disable a unit file using the persistent dbus connection
-static PyObject *py_disable_unit(PyObject *self, PyObject *args) {
+static PyObject *py_disable_unit(PyObject *Py_UNUSED(self), PyObject *args) {
   const char *unit;
   char *unit_copy = NULL;
   char errbuf[1024] = {0};
@@ -714,7 +718,7 @@ static PyObject *py_disable_unit(PyObject *self, PyObject *args) {
 }
 
 // Reload the systemd daemon. Must be used after making any changes to a unit file
-static PyObject *py_daemon_reload(PyObject *self, PyObject *args) {
+static PyObject *py_daemon_reload(PyObject *Py_UNUSED(self), PyObject *args) {
   char errbuf[1024] = {0};
   int r;
   BusObject *bus;
@@ -802,8 +806,9 @@ static struct PyMethodDef sdbus_methods[] = {
 static PyObject *_init_module(void) {
   PyObject *m;
 #if PY_MAJOR_VERSION >= 3
-  static struct PyModuleDef moduledef = {PyModuleDef_HEAD_INIT, "_sdbus", NULL,
-                                         -1, sdbus_methods};
+  static struct PyModuleDef moduledef = {
+      PyModuleDef_HEAD_INIT, .m_name = "_sdbus", .m_doc = NULL, .m_size = -1,
+      .m_methods = sdbus_methods};
   m = PyModule_Create(&moduledef);
 #else
   m = Py_InitModule("_sdbus", sdbus_methods);
