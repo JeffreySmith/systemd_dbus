@@ -101,7 +101,7 @@ permission is denied.
 %endif
 
 %install
-%{__python3} setup.py install --skip-build --root %{buildroot}
+%{__python3} setup.py install --root %{buildroot}
 %if %{with_python2}
 %py2_install
 %endif
