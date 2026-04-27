@@ -13,7 +13,7 @@ version = "0.3"
 description = """Thin Python bindings for a minimal set of systemd service management commands, using sd-bus. Also includes functionality for creating unit files, as well as polkit rules."""
 requires-python = ">=2.7"
 license = "Apache-2.0"
-license-files = ["LICENSE", "LICENSES/LICENSE.LGPL2.1"]
+#license-files = ["LICENSE", "LICENSES/LICENSE.LGPL2.1"]
 authors = [{ name = "Jeffrey Smith", email = "jeffrey.smith@acceldata.io" }]
 maintainers = [{ name = "Jeffrey Smith", email = "jeffrey.smith@acceldata.io" }]
 readme = "README.md"
