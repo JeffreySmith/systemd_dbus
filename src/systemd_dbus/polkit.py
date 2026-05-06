@@ -73,7 +73,7 @@ class PolkitRule:
         """Write the polkit rule to a file."""
         version = self.version()
         if version is None or version < 106:
-            Logger.warn(
+            Logger.info(
                 "Polkit not installed, or does not support JS rules, skipping writing rule"
             )
             return False
@@ -87,7 +87,7 @@ class PolkitRule:
         try:
             process = Popen(command, stdout=PIPE, stderr=PIPE)
         except OSError as e:
-            Logger.warn(
+            Logger.info(
                 "Unable to execute pkcheck to get polkit version: {0}".format(e)
             )
             return None
