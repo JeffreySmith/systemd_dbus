@@ -32,6 +32,13 @@ under the License.
 #if PY_MAJOR_VERSION < 3
 #define PyLong_FromLong PyInt_FromLong
 #define PyUnicode_FromString PyString_FromString
+#ifndef Py_UNUSED
+#if defined(__GNUC__) || defined(__clang__)
+#define Py_UNUSED(name) _unused_##name __attribute__((unused))
+#else
+#define Py_UNUSED(name) name
+#endif
+#endif
 #endif
 
 // Define a generic holder for Systemd errors
