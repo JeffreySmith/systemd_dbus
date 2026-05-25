@@ -52,6 +52,103 @@ manager.log("Your message here") # Log a message to syslog/journald.
 # Which can be any log level from Python's syslog.syslog.LOG_*
 ```
 
+## Usage in Ambari
+
+There are two ways to initialize SystemdManager in Ambari, depending on if you
+can be sure the package is installed before the script is initialized.
+
+If the library is already installed:
+
+```python
+from systemd_dbus import PolkitRule, SystemdManager, UnitFile
+from resource_management.core.exceptions import ComponentIsNotRunning
+class SomeMpack(Script)
+
+  def __init__(self):
+    super(SomeMpack, self).__init__()
+    self.manager = SystemdManager() 
+    self.my_service_name = "my_service"
+    self.user = "my_user"
+    self.group = "my_group"
+  def install(self,env):
+    pass
+
+  def configure(self, env):
+    unit_file = UnitFile(
+      service_name=self.my_service_name,
+      user=self.my_user,
+      group=self.my_group,
+    )
+    # set_options is used to set many options at once,
+    # but each key can be set individually as well
+    unit_file.set_options(
+      service=[
+        # Systemd Property, value, comment.
+        # Any other args after those 3 will be ignored
+        ("ExecStart", start_command),
+        ("EnvironmentFile", "-/my_env_file", "My Env file"),
+      ],
+      unit=[
+        ("Description", "Description of my service"),
+      ],
+    )
+    polkit_rule = PolkitRule(
+      unit_file_name,
+      users=[list_of_users_allowed_to_manage_this_service],
+      ambari_user=ambari_user,
+    )
+    
+    unit_file.write()
+    polkit_rule.write()
+    self.manager.daemon_reload()
+  
+  def start(self, env):
+    self.manager.start(self.my_service_name)
+
+  def stop(self, env):
+    self.manager.stop(self.my_service_name)
+
+  def restart(self, env):
+    self.stop(env)
+    self.start(env)
+  
+  def status(self, env):
+    if not self.manager.active(self.my_service_name):
+      raise ComponentIsNotRunning()
+```
+
+If the library is not guaranteed to be installed before the script is initialized:
+
+```python
+class SomeMpack(Script)
+
+  def __init__(self):
+    super(SomeMpack, self).__init__()
+    self.manager = None
+
+
+  def install(self,env):
+    # Install library in here
+    pass
+
+  @property
+  def manager(self):
+    """Lazy load the manager. The systemd library may not be installed
+    until after self.install()"""
+    if self._manager is None:
+      from systemd_dbus import SystemdManager
+      self._manager = SystemdManager()
+    return self._manager
+
+  def configure(self, env):
+    # Now import UnitFile and PolkitRule
+    from systemd_dbus import UnitFile, PolkitRule
+    # Same as the first example
+
+
+
+```
+
 ## Fallback
 
 When using this library, it will first attempt to access everything through
@@ -62,6 +159,50 @@ standard library.
 Not all functionality is available through the fallback methods, so some
 functions may not work if DBus is not available, but the most common ones
 should work.
+
+## Default Options
+
+There are a number of options that will be set by default, some of which
+are to make usage simpler, some of which are to improve security.
+
+The most important options to verify work with your service are the following:
+
+1. ReadWritePaths - Controls which paths the service can write to.
+2. RuntimeDirectory (If needed)
+3. ProtectHome - Prevents writing to the user's home directory.
+4. PrivateTmp - Prevents other services from reading tmp files made by this service
+
+`ReadWritePaths` is the option that is most likely to cause issues with your service,
+since it controls where the service can write to.
+In a Unit file, many keys can be specified multiple times, and the values
+will not override each other. So if you need multiple directories to be writable,
+you can specify `ReadWritePaths` as many times as needed.
+
+## Useful Functionality
+
+If your component has more than one service (ie 'master', 'worker', 'namenode', etc), you can
+define at initialization:
+
+```python
+nn_unit_file = UnitFile(service_name="hadoop", user="hdfs", component_name="namenode",)
+nn_unit_file.set_start_command(my_start_command)
+nn_unit_file.set_stop_command(my_stop_command)
+nn_unit_file.write()
+self.manager.daemon_reload()
+```
+
+This will create a unit file called `hadoop-namenode.service`.
+
+You can manage individual keys for the Unit File:
+
+```python
+# Deletes all keys that match "EnvironmentFile"
+UnitFile.delete_key("EnvironmentFile")
+# Delete only the keys that match 'value'
+UnitFile.delete_key("ExecStart", value="command_I_want_to_remove")
+# Update some key
+UnitFile.update_key(key, new_value, match="optional_value_to_match")
+```
 
 ## Building a Debian package
 
