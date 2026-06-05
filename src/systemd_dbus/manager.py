@@ -15,10 +15,11 @@ KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.
 """
-
+from __future__ import print_function
 import re
 import subprocess
 import warnings
+import sys
 import syslog
 from systemd_dbus import _sdbus
 try:
@@ -76,6 +77,15 @@ class SystemdManager:
                 pass
             finally:
                 self._bus = None
+
+    def __enter__(self): 
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        if exc_type is not None:
+            print("Exception '{}' occurred while closing D-Bus connection: {}.".format(exc_type, exc_value), file=sys.stderr)
+        self.close()
+        return False
 
     def __del__(self):
         try:

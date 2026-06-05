@@ -52,6 +52,20 @@ manager.log("Your message here") # Log a message to syslog/journald.
 # Which can be any log level from Python's syslog.syslog.LOG_*
 ```
 
+It can also act as a context manager, so you can write something like the following
+if there's only one place you want it enabled:
+
+```python
+def some_function():
+  with SystemdManager() as manager:
+    manager.stop("my_service")
+    manager.start("my_service.service")
+    timezone = manager.timezone()
+```
+
+At the end of the above block, the resources (D-Bus connection and memory
+allocated with malloc) will be cleaned up.
+
 ## Usage in Ambari
 
 There are two ways to initialize SystemdManager in Ambari, depending on if you
@@ -114,7 +128,7 @@ class SomeMpack(Script)
   
   def status(self, env):
     if not self.manager.active(self.my_service_name):
-      raise ComponentIsNotRunning()
+      raise ComponentIsNotRunning
 ```
 
 If the library is not guaranteed to be installed before the script is initialized:
@@ -128,7 +142,7 @@ class SomeMpack(Script)
 
 
   def install(self,env):
-    # Install library in here
+    # Things get installed here
     pass
 
   @property
@@ -145,9 +159,13 @@ class SomeMpack(Script)
     from systemd_dbus import UnitFile, PolkitRule
     # Same as the first example
 
-
-
 ```
+
+This is essentially doing a lazy import of systemd_dbus,
+which will be unnecessary in python3.15 and later once [pep-0810](https://peps.python.org/pep-0810/)
+is implemented.
+
+Any resources will be cleaned up when the `SystemdManager` instance is garbage collected.
 
 ## Fallback
 
@@ -180,8 +198,8 @@ you can specify `ReadWritePaths` as many times as needed.
 
 ## Useful Functionality
 
-If your component has more than one service (ie 'master', 'worker', 'namenode', etc), you can
-define at initialization:
+If your component has more than one service (ie 'master', 'worker', 'namenode', etc),
+you can define at initialization:
 
 ```python
 nn_unit_file = UnitFile(service_name="hadoop", user="hdfs", component_name="namenode",)
