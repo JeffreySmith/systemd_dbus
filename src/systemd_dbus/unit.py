@@ -64,7 +64,7 @@ class Option:
             self.comment = None
 
     def __str__(self):
-        value = " ".join(map(shell_quote, shlex.split(self.value)))
+        value = " ".join(shlex.split(self.value))
         output = []
         if self.comment:
             output.append("\t# {0}".format(self.comment))
