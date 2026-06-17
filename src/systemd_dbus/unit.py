@@ -105,7 +105,7 @@ class Section:
     """Represents a section in a systemd unit file."""
 
     def __init__(self, name, comment=None):
-        self.name = name
+        self.name = name.capitalize()
         self.comment = comment
         self.items = []
 
@@ -322,6 +322,7 @@ class UnitFile:
         ]
 
         for name, data in sections:
+            name = name.capitalize()
             if name not in self.options:
                 self.options[name] = Section(name, None)
             for item in data:
@@ -339,6 +340,7 @@ class UnitFile:
         comment=None,
     ):
         """Set all matching keys to this value."""
+        section = section.capitalize()
         if section not in self.options:
             self.options[section] = Section(section, None)
         self.options[section].set_key(key, value, comment)
@@ -375,6 +377,17 @@ class UnitFile:
         self.options["Service"].add("ReadWritePaths", path, comment)
         for p in paths:
             self.options["Service"].add("ReadWritePaths", p, None)
+
+    def add_env_var(self, var, value):
+        """Add one variable to the environment"""
+        self.options["Service"].add("Environment", "{0}={1}".format(var, value))
+
+    def add_env_vars(self, env):
+        """Add a number of variables. You must pass a dictionary of key value pairs."""
+        if not isinstance(env, dict):
+            raise ValueError("env must be a dictionary of key value pairs")
+        for k, v in env.items():
+            self.options["Service"].add("Environment", "{0}={1}".format(k,v))
 
     def delete_key(self, key, value=None, **kwargs):
         """Delete a key. Optionally, the key must match `value`"""
