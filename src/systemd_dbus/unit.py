@@ -220,7 +220,10 @@ class UnitFile:
         runtime_dir=None,
         folder="/usr/lib/systemd/system/",
     ):
-        self.name = service_name
+        self.name = service_name.replace(".service", "")
+        if component_name is not None:
+            component_name = component_name.replace(".service", "")
+
         self.unit_file = (
             component_name + ".service" if component_name else self.name + ".service"
         )
