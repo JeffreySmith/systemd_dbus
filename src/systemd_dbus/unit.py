@@ -418,6 +418,25 @@ class UnitFile:
             for k, v in keys_to_delete:
                 section.delete(k, v)
 
+    def create_env_file(self, env_options, file_path):
+        """Create an environment file to use with Systemd"""
+        if env_options is None or not isinstance(env_options, dict):
+            raise ValueError("env_options must be a dictionary of simple key value pairs.")
+
+        content = []
+        for k, v in env_options.items():
+            if isinstance(v, dict) or isinstance(v, list) or isinstance(v, tuple) or isinstance(v, set):
+                raise ValueError("env_options must be a dictionary of simple key value pairs.")
+            content.append("{0}=\"{1}\"".format(k, v))
+
+        output = "\n".join(content) + "\n"
+        try:
+            from resource_management.core import sudo
+            sudo.create_file(file_path, output, encoding="utf-8")
+        except ModuleNotFoundError:
+            with open(file_path, "w") as f:
+                print(output, file=f)
+ 
     def update_key(
         self,
         key,
