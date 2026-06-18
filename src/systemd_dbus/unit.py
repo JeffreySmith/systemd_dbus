@@ -19,31 +19,25 @@ under the License.
 
 from __future__ import print_function
 
-from resource_management.core import sudo
+#from resource_management.core import sudo
 
 try:
     from collections.abc import Sequence
 except ImportError:
     from collections import Sequence
 
-from subprocess import Popen, PIPE
-
 import os
-
-try:
-    from shlex import quote as shell_quote
-except ImportError:
-    from pipes import quote as shell_quote
 import shlex
-import subprocess
 
 # Allows us to use basestring across Python 2 and 3 by setting it to str if Python 3
 # Cleans up checking the types of certain variables
 try:
     basestring
+    ModuleNotFoundError = ImportError
 except NameError:
     basestring = str
 
+import sys
 
 
 class Option:
@@ -105,7 +99,7 @@ class Section:
     """Represents a section in a systemd unit file."""
 
     def __init__(self, name, comment=None):
-        self.name = name
+        self.name = name.capitalize()
         self.comment = comment
         self.items = []
 
@@ -182,14 +176,9 @@ class Section:
         if not self.items:
             return ""
 
-        header = (
-            "# {0}\n[{1}]".format(self.comment, self.name)
-            if self.comment
-            else "[{0}]".format(self.name),
-        )
+        header = "# {0}\n[{1}]".format(self.comment, self.name) if self.comment else "[{0}]".format(self.name)
 
-        section = [header] + [str(item) for item in self.item]
-
+        section = [header] + [str(item) for item in self.items]
         return "\n".join(section)
 
     def __contains__(self, key):
@@ -208,6 +197,20 @@ class Section:
         raise TypeError("Index must be an int, slice, or str")
 
 
+VALID_UNIT_TYPES = set([
+    "service",
+    "timer",
+    "socket",
+    "target",
+    "device",
+    "mount",
+    "automount",
+    "swap",
+    "slice",
+    "scope",
+    "snapshot",
+])
+
 class UnitFile:
     """Class for creating and managing systemd unit files"""
 
@@ -219,10 +222,19 @@ class UnitFile:
         group=None,
         runtime_dir=None,
         folder="/usr/lib/systemd/system/",
+        unit_type="service",
     ):
-        self.name = service_name
+        if unit_type not in VALID_UNIT_TYPES:
+            raise ValueError("Invalid unit type {0}. Valid types are: {1}".format(unit_type, VALID_UNIT_TYPES))
+        unit_type = "." + unit_type.replace(".","")
+
+
+        self.name = service_name.replace(unit_type, "")
+        if component_name is not None:
+            component_name = component_name.replace(unit_type, "")
+
         self.unit_file = (
-            component_name + ".service" if component_name else self.name + ".service"
+            component_name + unit_type if component_name else self.name + unit_type
         )
         self.file_path = os.path.join(folder, self.unit_file)
         self._content = ""
@@ -249,10 +261,14 @@ class UnitFile:
         else:
             runtime_directory = self.name
 
-        default_opts = {
-            "Unit": [("After", "network.target")],
-            "Install": [("WantedBy", "multi-user.target")],
-            "Service": [
+        if unit_type == ".service":
+            unit = [
+                ("After", "network.target")
+            ]
+            install = [
+                ("WantedBy", "multi-user.target")
+            ]
+            service = [
                 ("Type", "simple"),
                 ("User", user),
                 ("Group", group if group else user),
@@ -269,7 +285,16 @@ class UnitFile:
                 ("ProtectHome", "true"),
                 ("PrivateTmp", "true"),
                 ("PrivateDevices", "true"),
-            ],
+            ]
+        else:
+            unit = []
+            install = []
+            service = []
+
+        default_opts = {
+            "Unit": unit,
+            "Install": install,
+            "Service": service,
             "Socket": [],
             "Mount": [],
             "Automount": [],
@@ -319,6 +344,7 @@ class UnitFile:
         ]
 
         for name, data in sections:
+            name = name.capitalize()
             if name not in self.options:
                 self.options[name] = Section(name, None)
             for item in data:
@@ -336,6 +362,7 @@ class UnitFile:
         comment=None,
     ):
         """Set all matching keys to this value."""
+        section = section.capitalize()
         if section not in self.options:
             self.options[section] = Section(section, None)
         self.options[section].set_key(key, value, comment)
@@ -373,6 +400,17 @@ class UnitFile:
         for p in paths:
             self.options["Service"].add("ReadWritePaths", p, None)
 
+    def add_env_var(self, var, value):
+        """Add one variable to the environment"""
+        self.options["Service"].add("Environment", "{0}={1}".format(var, value))
+
+    def add_env_vars(self, env):
+        """Add a number of variables. You must pass a dictionary of key value pairs."""
+        if not isinstance(env, dict):
+            raise ValueError("env must be a dictionary of key value pairs")
+        for k, v in env.items():
+            self.options["Service"].add("Environment", "{0}={1}".format(k,v))
+
     def delete_key(self, key, value=None, **kwargs):
         """Delete a key. Optionally, the key must match `value`"""
         keys_to_delete = [(key, value)] + list(kwargs.items())
@@ -380,6 +418,25 @@ class UnitFile:
             for k, v in keys_to_delete:
                 section.delete(k, v)
 
+    def create_env_file(self, env_options, file_path):
+        """Create an environment file to use with Systemd"""
+        if env_options is None or not isinstance(env_options, dict):
+            raise ValueError("env_options must be a dictionary of simple key value pairs.")
+
+        content = []
+        for k, v in env_options.items():
+            if isinstance(v, dict) or isinstance(v, list) or isinstance(v, tuple) or isinstance(v, set):
+                raise ValueError("env_options must be a dictionary of simple key value pairs.")
+            content.append("{0}=\"{1}\"".format(k, v))
+
+        output = "\n".join(content) + "\n"
+        try:
+            from resource_management.core import sudo
+            sudo.create_file(file_path, output, encoding="utf-8")
+        except ModuleNotFoundError:
+            with open(file_path, "w") as f:
+                print(output, file=f)
+ 
     def update_key(
         self,
         key,
@@ -407,8 +464,14 @@ class UnitFile:
 
     def delete(self):
         """Delete the systemd unit file"""
-        if os.path.exists(self.file_path):
-            sudo.unlink(self.file_path)
+        try:
+            from resource_management.core import sudo
+            if os.path.exists(self.file_path):
+                sudo.unlink(self.file_path)
+
+        except ModuleNotFoundError:
+            if os.path.exists(self.file_path):
+                os.unlink(self.file_path)
 
     def create_manual(self, content):
         """Set the systemd unit file contents directly"""
@@ -417,7 +480,15 @@ class UnitFile:
     def write(self):
         """Write the systemd unit file to self.file_path"""
         unit_file = str(self)
-        sudo.create_file(self.file_path, unit_file, encoding="utf-8")
+        if len(unit_file) == 0:
+            print("Unit File: {} is empty", file=sys.stderr)
+        try:
+            from resource_management.core import sudo
+            sudo.create_file(self.file_path, unit_file, encoding="utf-8")
+        except ModuleNotFoundError:
+            with open(self.file_path, "w") as f:
+                print(unit_file, file=f)
+
 
     def __str__(self):
         if self._content:

@@ -196,6 +196,26 @@ In a Unit file, many keys can be specified multiple times, and the values
 will not override each other. So if you need multiple directories to be writable,
 you can specify `ReadWritePaths` as many times as needed.
 
+## Systemd Unit File Options
+
+The best place to find information about Systemd unit files is the [official docs](https://www.freedesktop.org/software/systemd/man/latest/systemd.unit.html).
+
+At a bare minimum, you should have the following options defined:
+
+```config
+[Unit]
+    Description=Description of your service
+    After=network.target
+[Service]
+    User=<The user the service should be run as>
+    Group=<Optional group the service should be run as>
+    ExecStart=<start command for your service>
+    ExecStop=<Optional stop command for your service>
+[Install]
+    WantedBy=multi-user.target
+
+```
+
 ## Useful Functionality
 
 If your component has more than one service (ie 'master', 'worker', 'namenode', etc),
@@ -221,6 +241,82 @@ UnitFile.delete_key("ExecStart", value="command_I_want_to_remove")
 # Update some key
 UnitFile.update_key(key, new_value, match="optional_value_to_match")
 ```
+
+## Polkit Support
+
+[Polkit](https://en.wikipedia.org/wiki/Polkit) is component for controlling privileges in Linux.
+It can be used to allow/deny users, groups, etc, without using sudo.
+These rules can be written and used without breaking the system, unlike sudo, which can do quite a lot of damage.
+These rules are also easily reloadable at runtime, making using them very simple.
+
+The only caveat is that not all Linux distributions support Polkit - For Ubuntu,
+you must be running Ubuntu 23.04 or later, and for RHEL/CentOS, you must be
+running RHEL/CentOS 8 or later.
+
+Essentially, this can be used to automatically grant users the permissions
+required to manage a service, without needing root access.
+
+These rules are written in Javascript and will be written to `/usr/share/polkit-1/rules.d/`.
+
+A basic example of automatically creating a polkit rules for a service is the following:
+
+```python
+
+def configure(self, env):
+  # Same as above
+  unit_file = UnitFile(
+    service_name=self.my_service_name,
+    user=self.my_user,
+    group=self.my_group,
+  )
+  unit_file.set_options(
+    service=[
+      ("ExecStart", start_command),
+      ("EnvironmentFile", "-/my_env_file", "My Env file"),
+    ],
+    unit=[
+      ("Description", "Description of my service"),
+    ],
+  )
+
+  polkit_rule = PolkitRule(
+    "my_service", # This will become the name of the rule
+    users=[params.my_user, params.my_hadoop_user],
+    group=params.hadoop_group # 'group' is optional
+    ambari_user=[pwd.getpwuid(os.getuid())[0]]
+    ambari_group="group_that_ambari_user_belongs_to", # Also optional
+  )
+
+```
+
+PolkitRule() has two additional specified parameters, `manual_rules`, in which
+you can pass a Jinja template that you specifiy yourself, and `prefix`, which
+by default is `40`, and controls the order in which files will be loaded.
+
+Aside from that, it can take any other arguments that you might need in your template.
+The args that the default template supports are:
+
+1. users: list\[str\]
+2. group: str
+3. ambari_user: str
+4. ambari_group: str
+
+For your own manual Polkit rules, add any additional keywords to the instantiation
+of the class:
+
+```python
+rule =PolkitRule(
+  "name",
+  users=["bob"],
+  ambari_user="ambari"),
+  my_dynamic_lib_dir=params.my_lib_dir,
+)
+rule.write()
+```
+
+If Polkit support is not available on the system, `.write()` is `noop`.
+
+For full documentation on Polkit rules, see the [official documentation](https://www.freedesktop.org/software/polkit/docs/latest/polkit.8.html)
 
 ## Building a Debian package
 
