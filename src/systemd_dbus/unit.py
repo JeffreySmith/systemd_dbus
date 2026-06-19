@@ -27,7 +27,6 @@ except ImportError:
     from collections import Sequence
 
 import os
-import shlex
 
 # Allows us to use basestring across Python 2 and 3 by setting it to str if Python 3
 # Cleans up checking the types of certain variables
@@ -58,11 +57,10 @@ class Option:
             self.comment = None
 
     def __str__(self):
-        value = " ".join(shlex.split(self.value))
         output = []
         if self.comment:
             output.append("\t# {0}".format(self.comment))
-        output.append("\t{0}={1}".format(self.key, value))
+        output.append("\t{0}={1}".format(self.key, self.value))
         return "\n".join(output)
 
     def __getitem__(self, index):
