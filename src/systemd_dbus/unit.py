@@ -18,7 +18,7 @@ under the License.
 """
 
 from __future__ import print_function
-
+__lazy_modules__ = []
 #from resource_management.core import sudo
 
 try:
@@ -26,7 +26,10 @@ try:
 except ImportError:
     from collections import Sequence
 
+from io import UnsupportedOperation
 import os
+import pwd
+import sys
 
 # Allows us to use basestring across Python 2 and 3 by setting it to str if Python 3
 # Cleans up checking the types of certain variables
@@ -36,13 +39,11 @@ try:
 except NameError:
     basestring = str
 
-import sys
-
-
 class Option:
     """Represents a key value pair option in a systemd unit file."""
 
     def __init__(self, key, value, comment=None):
+        # type: (str, str, str|None) -> None
         self.key = key
         self.value = value
         self.comment = comment
@@ -57,6 +58,7 @@ class Option:
             self.comment = None
 
     def __str__(self):
+        # type: () -> str
         output = []
         if self.comment:
             output.append("\t# {0}".format(self.comment))
@@ -64,6 +66,7 @@ class Option:
         return "\n".join(output)
 
     def __getitem__(self, index):
+        # type: (int) -> str|None
         """Returns either a String or None"""
         if index == 0:
             return self.key
@@ -75,6 +78,7 @@ class Option:
             raise IndexError("Index '{0}' out of range".format(index))
 
     def __setitem__(self, index, value):
+        # type: (int, str) -> None
         if index == 0:
             self.key = value
         elif index == 1:
@@ -97,6 +101,7 @@ class Section:
     """Represents a section in a systemd unit file."""
 
     def __init__(self, name, comment=None):
+        # type: (str, str|None) -> None
         self.name = name.capitalize()
         self.comment = comment
         self.items = []
@@ -409,6 +414,7 @@ class UnitFile:
         for k, v in env.items():
             self.options["Service"].add("Environment", "{0}={1}".format(k,v))
 
+
     def delete_key(self, key, value=None, **kwargs):
         """Delete a key. Optionally, the key must match `value`"""
         keys_to_delete = [(key, value)] + list(kwargs.items())
@@ -416,7 +422,9 @@ class UnitFile:
             for k, v in keys_to_delete:
                 section.delete(k, v)
 
-    def create_env_file(self, env_options, file_path):
+    @staticmethod
+    def create_env_file(env_options, file_path, owner="root", permission=0o600):
+        # type: (dict, str, str, int) -> None
         """Create an environment file to use with Systemd"""
         if env_options is None or not isinstance(env_options, dict):
             raise ValueError("env_options must be a dictionary of simple key value pairs.")
@@ -428,12 +436,28 @@ class UnitFile:
             content.append("{0}=\"{1}\"".format(k, v))
 
         output = "\n".join(content) + "\n"
+
+        try:
+            user = pwd.getpwnam(owner)
+
+        except KeyError as e:
+            print("User '{}' does not exist - {}".format(owner, e), file=sys.stderr)
+            raise
+
         try:
             from resource_management.core import sudo
             sudo.create_file(file_path, output, encoding="utf-8")
+            sudo.chown(file_path, user)
+            sudo.chmod(file_path, permission)
         except ModuleNotFoundError:
             with open(file_path, "w") as f:
                 print(output, file=f)
+                os.chown(file_path, user.pw_uid, user.pw_gid)
+                os.chmod(file_path, permission)
+
+        except (FileNotFoundError, PermissionError, UnsupportedOperation) as e:
+            print("Could not save to file {} - {}".format(file_path, e), file=sys.stderr)
+            raise
  
     def update_key(
         self,
